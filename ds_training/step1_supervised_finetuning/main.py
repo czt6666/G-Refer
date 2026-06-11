@@ -15,6 +15,7 @@ from typing import Optional, Dict, Sequence
 import transformers
 from transformers import (
     AutoModelForCausalLM,
+    AutoTokenizer,
     SchedulerType,
     default_data_collator,
     get_scheduler,
@@ -232,8 +233,10 @@ def main():
 
     print('loading from ...', args.model_name_or_path)
     
-    tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path,
-                                              fast_tokenizer=True)
+    # AutoTokenizer works for both Llama-2/TinyLlama (SentencePiece) and Llama-3
+    # (fast tokenizer.json only; the slow LlamaTokenizer would fail there).
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path,
+                                              use_fast=True)
     
     
     # tokenizer = load_hf_tokenizer(args.model_name_or_path, fast_tokenizer=True)
