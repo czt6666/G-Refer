@@ -1,0 +1,33 @@
+# === Original author ignores ===
+raft_data/
+path_retriever/datasets
+path_retriever/saved_explanations
+data/
+path_retriever/saved_models
+
+# === Downloaded models / checkpoints / data ===
+ckpts/
+convert_files/
+models/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+# scratch downloads
+downloads/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# === Logs / misc ===
+*.log
+training.log
+.DS_Store
+wandb/
