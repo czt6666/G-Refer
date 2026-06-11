@@ -1,8 +1,10 @@
 # === Original author ignores ===
-raft_data/
+# dataset/artifact dirs at the repo root only (anchored with leading slash so
+# the code module ds_training/utils/data/ is NOT ignored)
+/raft_data/
+/data/
 path_retriever/datasets
 path_retriever/saved_explanations
-data/
 path_retriever/saved_models
 
 # === Downloaded models / checkpoints / data ===
