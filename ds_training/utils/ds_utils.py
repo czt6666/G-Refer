@@ -25,9 +25,9 @@ def get_train_ds_config(offload,
             "device": device
         },
         "stage3_param_persistence_threshold": 1e4,
-        "stage3_max_live_parameters": 3e7,
-        "stage3_prefetch_bucket_size": 3e7,
-        "memory_efficient_linear": False
+        "stage3_max_live_parameters": 1e6,
+        "stage3_prefetch_bucket_size": 1e6,
+        "memory_efficient_linear": True
     }
     return {
         "train_batch_size": GLOBAL_BATCH_SIZE,
@@ -35,9 +35,9 @@ def get_train_ds_config(offload,
         "steps_per_print": 10,
         "zero_optimization": zero_opt_dict,
         "bf16": {
+            # loss_scale_window / min_loss_scale are fp16-only knobs; deepspeed
+            # >=0.16 rejects them under a strict (pydantic) BF16Config.
             "enabled": True,
-            "loss_scale_window": 50,
-            "min_loss_scale": 1e-10,
         },
         "gradient_clipping": 1.0,
         "prescale_gradients": False,
