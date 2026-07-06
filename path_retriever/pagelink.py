@@ -1,4 +1,5 @@
 import os
+import time
 import torch
 import argparse
 import pickle
@@ -103,12 +104,10 @@ set_seed(0)
 processed_g = load_dataset(args.dataset_dir, args.dataset_name, args.split, args.valid_ratio, args.test_ratio, args.stage)[1]
 mp_g, train_pos_g, train_neg_g, val_pos_g, val_neg_g, test_pos_g, test_neg_g = [g.to(device) for g in processed_g]
 
-# encoder = HeteroRGCN(mp_g, args.emb_dim, args.hidden_dim, args.out_dim)
-# model = HeteroLinkPredictionModel(encoder, args.src_ntype, args.tgt_ntype, args.link_pred_op, **pred_kwargs)
-encoder = LightGCN(mp_g, args.emb_dim, 2)
+encoder = HeteroRGCN(mp_g, args.emb_dim, args.hidden_dim, args.out_dim)
 model = HeteroLinkPredictionModel(encoder, args.src_ntype, args.tgt_ntype, args.link_pred_op, **pred_kwargs)
-state = torch.load(f'{args.saved_model_dir}/{args.saved_model_name}_{args.split}_lightgcn.pth', map_location='cpu')
-model.load_state_dict(state)  
+state = torch.load(f'{args.saved_model_dir}/{args.saved_model_name}_{args.split}.pth', map_location='cpu')
+model.load_state_dict(state)
 
 pagelink = PaGELink(model, 
                     lr=args.lr,
@@ -127,30 +126,39 @@ if args.max_num_samples > 0:
 
 pred_edge_to_comp_g_edge_mask = {}
 pred_edge_to_paths = {}
+explain_wall_times = []
 for i in tqdm(test_ids):
     src_nid, tgt_nid = test_src_nids[i].unsqueeze(0), test_tgt_nids[i].unsqueeze(0)
-    
+
     with torch.no_grad():
         pred = model(src_nid, tgt_nid, mp_g).sigmoid().item() > 0.5
 
     if pred:
         src_tgt = ((args.src_ntype, int(src_nid)), (args.tgt_ntype, int(tgt_nid)))
         try:
-            paths, comp_g_edge_mask_dict = pagelink.explain(src_nid, 
-                                                            tgt_nid, 
+            t0 = time.perf_counter()
+            paths, comp_g_edge_mask_dict = pagelink.explain(src_nid,
+                                                            tgt_nid,
                                                             mp_g,
                                                             args.num_hops,
                                                             args.prune_max_degree,
-                                                            args.k_core, 
-                                                            args.num_paths, 
+                                                            args.k_core,
+                                                            args.num_paths,
                                                             args.max_path_length,
                                                             return_mask=True)
+            explain_wall_times.append(time.perf_counter() - t0)
         except Exception as e:
             print(f"Error explaining edge ({src_nid}, {tgt_nid}): {str(e)}")
             paths, comp_g_edge_mask_dict = [], {}
-        
-        pred_edge_to_comp_g_edge_mask[src_tgt] = comp_g_edge_mask_dict 
+
+        pred_edge_to_comp_g_edge_mask[src_tgt] = comp_g_edge_mask_dict
         pred_edge_to_paths[src_tgt] = paths
+
+if explain_wall_times:
+    n = len(explain_wall_times)
+    total = sum(explain_wall_times)
+    print(f"[retrieval-timing] n={n} total={total:.3f}s mean={total/n:.4f}s "
+          f"min={min(explain_wall_times):.4f}s max={max(explain_wall_times):.4f}s")
 
 if args.save_explanation:
     if not os.path.exists(args.saved_explanation_dir):

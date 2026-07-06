@@ -32,7 +32,7 @@ sys.path.append(
 from utils.data.data_utils import create_prompt_dataset
 from utils.utils import print_rank_0, to_device, save_hf_format, set_random_seed, get_all_reduce_mean, get_optimizer_grouped_parameters, save_zero_three_model, load_hf_tokenizer
 from utils.ds_utils import get_train_ds_config
-from utils.module.lora import convert_linear_layer_to_lora, convert_lora_to_linear_layer, only_optimize_lora_parameters
+from utils.module.lora import convert_linear_layer_to_lora, convert_lora_to_linear_layer, unfuse_lora_layer, only_optimize_lora_parameters
 from utils.model.model_utils import create_hf_model
 
 
@@ -414,6 +414,26 @@ def main():
 
         model.tput_timer.update_epoch_count()
 
+        # Per-epoch safety checkpoint: fuse LoRA into the base weights, save a
+        # usable model snapshot to epoch_<n>/, then unfuse so training resumes
+        # unchanged. Guards against losing the whole run if a later epoch crashes.
+        if args.output_dir is not None:
+            epoch_dir = os.path.join(args.output_dir, f"epoch_{epoch+1}")
+            print_rank_0(f'saving per-epoch checkpoint to {epoch_dir} ...',
+                         args.global_rank)
+            model = convert_lora_to_linear_layer(model)
+            if args.zero_stage == 3:
+                save_zero_three_model(model,
+                                      tokenizer,
+                                      args.global_rank,
+                                      epoch_dir,
+                                      zero_stage=args.zero_stage)
+            elif args.global_rank == 0:
+                save_hf_format(model, tokenizer, args,
+                               sub_folder=f"epoch_{epoch+1}")
+            model = unfuse_lora_layer(model)
+            model.train()
+
     if args.output_dir is not None:
         print_rank_0('saving the final model ...', args.global_rank)
         model = convert_lora_to_linear_layer(model)
@@ -442,7 +462,11 @@ def main():
         #     plt.tight_layout()
         #     plt.savefig(f'{args.output_dir}/loss_plot.png') 
 
-        if args.global_rank == 0:
+        # save_hf_format uses a plain state_dict() which is empty/sharded under
+        # ZeRO-3, and its tokenizer.save_vocabulary() raises NotImplementedError
+        # for Llama-3's fast tokenizer. Skip it for ZeRO-3 and rely on
+        # save_zero_three_model below (which gathers params and uses save_pretrained).
+        if args.global_rank == 0 and args.zero_stage != 3:
             save_hf_format(model, tokenizer, args)
 
         if args.zero_stage == 3:

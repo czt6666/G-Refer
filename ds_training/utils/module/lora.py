@@ -131,6 +131,26 @@ def convert_lora_to_linear_layer(model):
     return model
 
 
+# undo convert_lora_to_linear_layer so training can resume after saving a
+# fused per-epoch checkpoint
+def unfuse_lora_layer(model):
+    repalce_name = []
+    for name, module in model.named_modules():
+        if isinstance(module, LinearLayer_LoRA):
+            repalce_name.append(name)
+    for name in repalce_name:
+        module = recursive_getattr(model, name)
+        zero_stage_3 = hasattr(module.weight, 'ds_id')
+        with deepspeed.zero.GatheredParameters(_z3_params_to_fetch([
+                module.weight, module.bias, module.lora_left_weight,
+                module.lora_right_weight
+        ]),
+                                               modifier_rank=0,
+                                               enabled=zero_stage_3):
+            module.unfuse_lora_weight()
+    return model
+
+
 def only_optimize_lora_parameters(model):
     # turn off the gradient of all the parameters except the LoRA parameters
     for name, param in model.named_parameters():
