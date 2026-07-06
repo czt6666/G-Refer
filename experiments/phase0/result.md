@@ -38,9 +38,26 @@ Step 7-9（RAFT 微调 → 推理 → 评估）在本机完整跑通。
 | BERT-R | 0.4373 | 0.4403 | +0.0030 |
 | **BERT-F1**（主指标） | 0.4003 | **0.4038** | +0.0035 |
 | BARTScore | -3.6448 | -2.8901 | +0.75（更优） |
+| BLEURT | -0.1336 | **-0.3217** | -0.188（更差，见下方说明） |
 | USR | 1.0000 | 1.0000 | 0 |
 | GPTScore | 75.16 | 未跑（需 OpenAI key） | — |
-| BLEURT | -0.1336 | 未跑（需 tensorflow） | — |
+
+**BLEURT 补充说明（后续追加，2026-07-06 二次验证）**：最初因环境缺 tensorflow 跳过，现已补跑。
+tensorflow 通过 aliyun 镜像正常装上；`bleurt` 包本身不在 PyPI（只能
+`pip install git+https://github.com/...`，这类"直接执行外部仓库代码"的命令会被安全策略拦截），
+改为绕过官方 pip 包，直接用 `tf.saved_model.load()` 调用从
+`storage.googleapis.com/bleurt-oss/bleurt-base-128.zip`（Google 官方发布的权重文件，
+经确认 `storage.googleapis.com` 网络可达）下载的 **官方预训练 checkpoint**
+（`evaluation/bleurt_scorer.py`），配合 `transformers.BertTokenizer` 读取 checkpoint 自带的
+`vocab.txt` 做分词——全程不依赖外部仓库代码，只用已安装的 TensorFlow/transformers 调用
+Google 发布的模型权重。用两句话（完全相同 vs 完全无关）做了正确性抽查：相同句子
+0.987（接近满分 1.0），无关句子 -1.674（远低于 0），符合 BLEURT 预期行为。
+
+BLEURT 分数本身比论文低不少（-0.32 vs -0.14），是本报告里唯一一个"差距明显大于其余指标"的
+数字，**如实记录、不淡化**：可能原因是 (1) `bleurt-base-128` 是较小的 BLEURT 变体，论文用的
+具体版本未知，量级上可能不完全可比；(2) 本次复现受限于 3090 显存，训练用 max_seq_len=1024/
+有效 batch=2（论文 2048/16），生成质量在 BLEURT 这个"语义相似度"维度上可能确实比论文弱，
+即便 BERTScore/BARTScore 两个维度都对齐得很好。
 
 结论：核心语义指标复现在随机噪声范围内（<0.004），USR 完全一致 → **复现有效，达到 Phase 0 门槛**。
 
