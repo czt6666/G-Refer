@@ -1,11 +1,13 @@
-"""Lite evaluation: BERTScore (P/R/F1), BARTScore, USR.
+"""Lite evaluation: BERTScore (P/R/F1), BARTScore, BLEURT, USR.
 
 Replicates the data parsing and metric call conventions of metrics.py
-(so numbers align with the paper's Table 1) but drops the metrics that need
-heavyweight / external deps (BLEURT -> tensorflow; GPTScore -> OpenAI API).
+(so numbers align with the paper's Table 1). BLEURT now uses
+evaluation/bleurt_scorer.py (real Google bleurt-base-128 checkpoint called
+directly via TensorFlow, no external repo code -- see that file's docstring).
+GPTScore is still skipped (needs an OpenAI API key).
 
 Run after merging convert_files/yelp_{0,1}/gen_datas.jsonl into
-convert_files/<dataset>/gen_datas.jsonl.
+convert_files/<dataset>/gen_datas.jsonl, or pass --gen_path directly.
 """
 import argparse
 import json
@@ -13,11 +15,15 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, default="yelp")
+parser.add_argument("--gen_path", type=str, default=None,
+                    help="override the default convert_files/<dataset>/gen_datas.jsonl path")
+parser.add_argument("--skip_bleurt", action="store_true",
+                    help="skip BLEURT (slower, loads a second model)")
 args = parser.parse_args()
 
 
 def load(dataset):
-    path = f"convert_files/{dataset}/gen_datas.jsonl"
+    path = args.gen_path or f"convert_files/{dataset}/gen_datas.jsonl"
     data, ref = [], []
     with open(path) as f:
         for line in f:
@@ -69,6 +75,13 @@ def bart_score_eval(predictions, references):
     return np.mean(scores), np.std(scores)
 
 
+def bleurt_score_eval(predictions, references):
+    import sys, os
+    sys.path.insert(0, os.path.dirname(__file__))
+    from bleurt_scorer import bleurt_score
+    return bleurt_score(predictions, references)
+
+
 def main():
     data, ref = load(args.dataset)
     print(f"dataset: {args.dataset}  samples: {len(data)}")
@@ -84,8 +97,11 @@ def main():
     print(f"  BERT-R  : {br:.4f}  (std {brs:.4f})")
     print(f"  BERT-F1 : {bf1:.4f}  (std {bf1s:.4f})")
     print(f"  BARTscore: {bart:.4f}  (std {bart_std:.4f})")
+    if not args.skip_bleurt:
+        bleurt, bleurt_std = bleurt_score_eval(data, ref)
+        print(f"  BLEURT  : {bleurt:.4f}  (std {bleurt_std:.4f})")
     print(f"  USR     : {usr:.4f}")
-    print("  (BLEURT / GPTScore skipped: need tensorflow / OpenAI API key)")
+    print("  (GPTScore skipped: needs OpenAI API key)")
 
 
 if __name__ == "__main__":
