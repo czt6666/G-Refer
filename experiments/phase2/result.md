@@ -76,6 +76,22 @@ LightGCN checkpoint。所以：
 | RippleNet(#8) 偏好传播候选路径 | 延后 | 需要真实多关系图（区分 buys/likes）做多跳偏好传播，当前合成图关系退化，传播结果无意义 |
 | KGRec(#2/#4) rationale 打分/去噪 | 延后 | 同上，边权去噪需要真实边语义区分才有意义 |
 
+### 附：`download_data.py` manifest 复核（重要更正）
+
+重新核对 `download_data.py` 的下载清单后发现：**`{split}.pkl` 从未在清单里出现过** ——
+不是"本机没下载"，而是**论文作者的公开数据发布本身就不含这个中间文件**（只发布了
+`data_trn.pt`、`dense_retrieval_results_*.json`、`saved_models/`、`saved_explanations/`、
+`raft_data/` 这些"已经算好的产物"）。也就是说 Step1-2 的原始检索管线**在任何网络环境下都
+无法从公开数据完整复现**，这不是本机网络限制问题。
+
+顺带确认：`data/yelp/dense_retrieval_results_trn.json`（74212 对 user-item 的真实
+IntTower/GNRR 候选，论文作者用真实 `.pkl` 跑出来的产物）确实存在且可读，但抽查发现
+`code/dense_retriever.py:69` 有个数据 bug——`topk_user_similarities` 字段在保存前已经把
+`topk_users` 重新赋值成纯 id 列表（第 57 行剪枝后），导致存下来的"相似度"其实是 id 本身
+（`topk_user_ids == topk_user_similarities`，抽查样本完全一致）。这不影响本 Phase 的结论
+（IntTower 的 sum-max 本来就因为节点表征是单一池化向量、没有多向量表征而无法套用，跟这个
+bug 无关），记录下来供以后修复原始 pipeline 时参考。
+
 ## 5. 验收结论
 
 **部分通过**：backbone 消融（KGAT/LightGCN vs R-GCN）方向完整跑通并给出明确、一致的结果
