@@ -7,7 +7,7 @@ from sklearn.metrics import roc_auc_score
 from pathlib import Path
 from utils import set_seed, negative_sampling, print_args, set_config_args
 from data_processing import load_dataset
-from model import HeteroRGCN, HeteroLinkPredictionModel, LightGCN
+from model import HeteroRGCN, HeteroLinkPredictionModel, LightGCN, KGAT
 
 parser = argparse.ArgumentParser(description='Train a GNN-based link prediction model')
 parser.add_argument('--device_id', type=int, default=-1)
@@ -28,6 +28,9 @@ GNN args
 parser.add_argument('--emb_dim', type=int, default=128)
 parser.add_argument('--hidden_dim', type=int, default=128)
 parser.add_argument('--out_dim', type=int, default=128)
+parser.add_argument('--encoder', type=str, default='rgcn', choices=['rgcn', 'lightgcn', 'kgat'],
+                    help='GNN backbone: rgcn (original), lightgcn (#7 arXiv:2002.02126), '
+                         'kgat (#6 arXiv:1905.07854, attention aggregation, see model.KGATLayer)')
 
 '''
 Link predictor args
@@ -132,10 +135,13 @@ def run():
 processed_g = load_dataset(args.dataset_dir, args.dataset_name, args.split, args.valid_ratio, args.test_ratio, args.stage)[1]
 mp_g, train_pos_g, train_neg_g, val_pos_g, val_neg_g, test_pos_g, test_neg_g = [g.to(device) for g in processed_g]
 
-encoder = HeteroRGCN(mp_g, args.emb_dim, args.hidden_dim, args.out_dim)
+if args.encoder == 'lightgcn':
+    encoder = LightGCN(mp_g, args.emb_dim, 2)
+elif args.encoder == 'kgat':
+    encoder = KGAT(mp_g, args.emb_dim, args.hidden_dim, args.out_dim)
+else:
+    encoder = HeteroRGCN(mp_g, args.emb_dim, args.hidden_dim, args.out_dim)
 model = HeteroLinkPredictionModel(encoder, args.src_ntype, args.tgt_ntype, args.link_pred_op, **pred_kwargs)
-# encoder = LightGCN(mp_g, args.emb_dim, 2)
-# model = HeteroLinkPredictionModel(encoder, args.src_ntype, args.tgt_ntype, args.link_pred_op, **pred_kwargs)
 
 model.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -146,6 +152,9 @@ if args.save_model:
     output_dir = Path.cwd().joinpath(args.saved_model_dir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    torch.save(model.state_dict(), output_dir.joinpath(f"{args.dataset_name}_model_{args.split}.pth"))
+    # encoder suffix (empty for 'rgcn') keeps this from clobbering the
+    # original {dataset}_model_{split}.pth R-GCN checkpoint used elsewhere
+    suffix = '' if args.encoder == 'rgcn' else f'_{args.encoder}'
+    torch.save(model.state_dict(), output_dir.joinpath(f"{args.dataset_name}_model_{args.split}{suffix}.pth"))
 
 # python train_linkpred.py --dataset_name yelp --save_model
