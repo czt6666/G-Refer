@@ -32,7 +32,7 @@ sys.path.append(
 from utils.data.data_utils import create_prompt_dataset
 from utils.utils import print_rank_0, to_device, save_hf_format, set_random_seed, get_all_reduce_mean, get_optimizer_grouped_parameters, save_zero_three_model, load_hf_tokenizer
 from utils.ds_utils import get_train_ds_config
-from utils.module.lora import convert_linear_layer_to_lora, convert_lora_to_linear_layer, unfuse_lora_layer, only_optimize_lora_parameters
+from utils.module.lora import convert_linear_layer_to_lora, convert_lora_to_linear_layer, unfuse_lora_layer, only_optimize_lora_parameters, convert_linear_layer_to_graph_lora, GraphLoRAGate, set_graph_gate, clear_graph_gate
 from utils.model.model_utils import create_hf_model
 
 sys.path.append(
@@ -185,6 +185,13 @@ def parse_args():
                         type=int,
                         default=256,
                         help='Dimensionality of the precomputed subgraph embeddings.')
+    ## Phase 4: GraphLoRA (arXiv:2606.07526)
+    parser.add_argument(
+        '--use_graph_lora',
+        action='store_true',
+        help='Gate every LoRA layer\'s low-rank update per-example by a '
+        'projection of --subgraph_embed_path (which must also be set). '
+        'Gate starts at ~1.0 (vanilla LoRA) and is learned jointly.')
     parser = deepspeed.add_config_arguments(parser)
     args = parser.parse_args()
 
@@ -197,15 +204,25 @@ def parse_args():
     return args
 
 
-def build_model_inputs(model, batch, projector):
+def build_model_inputs(model, batch, projector, graph_lora_gate=None):
     """If `batch` carries a `subgraph_embed` (Phase 3 soft-prompt, see
     --subgraph_embed_path), project it and prepend it as one extra token to
     the input embeddings, switching the call from input_ids to inputs_embeds.
     Otherwise return `batch` unchanged (original G-Refer behavior).
+
+    If `graph_lora_gate` is given (Phase 4, --use_graph_lora), also computes
+    the per-example GraphLoRA gate from the same subgraph_embed and sets it
+    via set_graph_gate() as a side effect -- the caller MUST call
+    clear_graph_gate() after the model(**model_inputs) call.
     """
     subgraph_embed = batch.pop('subgraph_embed', None)
     if projector is None or subgraph_embed is None:
         return batch
+
+    if graph_lora_gate is not None:
+        gate_dtype = next(graph_lora_gate.parameters()).dtype
+        gate = graph_lora_gate(subgraph_embed.to(gate_dtype))
+        set_graph_gate(gate.unsqueeze(1))  # [B, 1, 1], broadcasts over seq len
 
     input_ids = batch.pop('input_ids')
     attention_mask = batch.pop('attention_mask')
@@ -316,11 +333,23 @@ def main():
     # )
     # model.resize_token_embeddings(len(tokenizer))
 
+    if args.use_graph_lora:
+        assert args.subgraph_embed_path is not None, \
+            "--use_graph_lora requires --subgraph_embed_path"
     if args.lora_dim > 0:
-        model = convert_linear_layer_to_lora(model, args.lora_module_name,
-                                             args.lora_dim)
+        if args.use_graph_lora:
+            model = convert_linear_layer_to_graph_lora(model, args.lora_module_name,
+                                                       args.lora_dim)
+        else:
+            model = convert_linear_layer_to_lora(model, args.lora_module_name,
+                                                 args.lora_dim)
         if args.only_optimize_lora:
             model = only_optimize_lora_parameters(model)
+
+    graph_lora_gate = None
+    if args.use_graph_lora:
+        graph_lora_gate = GraphLoRAGate(args.subgraph_dim)
+        model.graph_lora_gate = graph_lora_gate
 
     subgraph_embeds = None
     subgraph_projector = None
@@ -378,9 +407,11 @@ def main():
         losses = 0
         for step, batch in enumerate(eval_dataloader):
             batch = to_device(batch, device)
-            model_inputs = build_model_inputs(model, batch, subgraph_projector)
+            model_inputs = build_model_inputs(model, batch, subgraph_projector,
+                                              graph_lora_gate)
             with torch.no_grad():
                 outputs = model(**model_inputs)
+            clear_graph_gate()
 
             loss = outputs.loss
             losses += loss.float()
@@ -448,8 +479,10 @@ def main():
             batch = to_device(batch, device)
             # print("batch:")
             # print(batch)
-            model_inputs = build_model_inputs(model, batch, subgraph_projector)
+            model_inputs = build_model_inputs(model, batch, subgraph_projector,
+                                              graph_lora_gate)
             outputs = model(**model_inputs, use_cache=False)
+            clear_graph_gate()
             loss = outputs.loss
             mean_loss += loss.item()
             steps += 1

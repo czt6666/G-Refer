@@ -104,6 +104,81 @@ def convert_linear_layer_to_lora(model,
     return model
 
 
+# ---------------------------------------------------------------------------
+# Phase 4: GraphLoRA (#18, arXiv:2606.07526)
+#
+# Simplification vs the paper: GraphLoRA embeds graph message passing inside
+# the low-rank pathway itself (a bigger reparameterization of A/B). Here,
+# instead, every GraphLoRALinear's low-rank delta is multiplicatively gated
+# by a per-example scalar derived from that example's user-item (sub)graph
+# embedding (see subgraph_retriever/), so the *same* LoRA weights produce a
+# structure-conditioned update per example rather than one static delta
+# shared by the whole dataset. At initialization the gate is ~1.0 (identity),
+# so GraphLoRA starts out behaving exactly like vanilla LoRA.
+#
+# Because LoRA-converted layers are called deep inside the wrapped HF model
+# with no per-example side channel, the current batch's gate is broadcast via
+# a small module-level context (set_graph_gate/clear_graph_gate) rather than
+# threaded through every intermediate forward() signature in transformers.
+# ---------------------------------------------------------------------------
+class _GraphLoRAContext:
+    gate = None  # Tensor [batch, 1, 1] or None
+
+
+def set_graph_gate(gate):
+    _GraphLoRAContext.gate = gate
+
+
+def clear_graph_gate():
+    _GraphLoRAContext.gate = None
+
+
+class GraphLoRAGate(nn.Module):
+    """Projects a subgraph embedding to a per-example LoRA gate, initialized
+    to ~1.0 (identity multiplier) so training starts equivalent to vanilla LoRA.
+    """
+    def __init__(self, in_dim):
+        super().__init__()
+        self.net = nn.Linear(in_dim, 1)
+        nn.init.zeros_(self.net.weight)
+        nn.init.zeros_(self.net.bias)
+
+    def forward(self, subgraph_embed):
+        # tanh(0) == 0 at init -> gate == 1.0 exactly until trained
+        return 1.0 + torch.tanh(self.net(subgraph_embed))
+
+
+class GraphLoRALinear(LinearLayer_LoRA):
+    def forward(self, input):
+        if self.fuse_lora:
+            return F.linear(input, self.weight, self.bias)
+        base = F.linear(input, self.weight, self.bias)
+        delta = (self.lora_dropout(input) @ self.lora_right_weight
+                @ self.lora_left_weight) * self.lora_scaling
+        gate = _GraphLoRAContext.gate
+        if gate is not None:
+            delta = delta * gate.to(delta.dtype)
+        return base + delta
+
+
+def convert_linear_layer_to_graph_lora(model,
+                                       part_module_name,
+                                       lora_dim=0,
+                                       lora_scaling=1,
+                                       lora_droppout=0):
+    repalce_name = []
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear) and part_module_name in name:
+            repalce_name.append(name)
+    for name in repalce_name:
+        module = recursive_getattr(model, name)
+        tmp = GraphLoRALinear(
+            module.weight, lora_dim, lora_scaling, lora_droppout,
+            module.bias).to(module.weight.device).to(module.weight.dtype)
+        recursive_setattr(model, name, tmp)
+    return model
+
+
 def _z3_params_to_fetch(param_list):
     return [
         p for p in param_list
