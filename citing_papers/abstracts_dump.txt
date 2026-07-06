@@ -1,0 +1,208 @@
+==============================
+0 | 2026 | Contrastive Learning for Explanation Ranking
+   ids: {'DOI': '10.1007/s10994-026-07099-7'}
+   ABSTRACT: Explainable recommendation systems enhance user trust and satisfaction by revealing the reasoning behind personalized recommendations. Approaching this as a post-hoc explanation-ranking problem over a fixed pool of candidate explanations, we propose Contrastive Learning for Explanation Ranking (CLER), a model that learns user, item, and explanation representations with a Normalized Temperature-scaled Binary Cross-Entropy (NT-BXent) loss. This function specifically applies a per-row reweighting strategy, preventing the vast number of negative examples from dominating the objective. We evaluate 
+==============================
+1 | 2026 | Hypergraph topic neural network with cross-modal fusion for latent treatment pattern recommendation
+   ids: {'DOI': '10.1016/j.engappai.2026.114508'}
+   ABSTRACT: (none)
+==============================
+2 | 2026 | A survey on medical multimodal retrieval-augmented generation (RAG)
+   ids: {'DOI': '10.1016/j.hcc.2026.100415'}
+   ABSTRACT: (none)
+==============================
+3 | 2026 | Trustworthy Recommendation in the Era of Large Language Models: Opportunities and Challenges
+   ids: {'ArXiv': '2606.00540'}
+   ABSTRACT: The field of recommender systems (RS) is currently undergoing two profound paradigm shifts. From the perspective of objectives, the goal has shifted beyond mere recommendation accuracy to comprehensive trustworthiness, encompassing multiple dimensions such as robustness, fairness, and privacy preservation. From a technical perspective, Large Language Models (LLMs) have been extensively integrated into RS, reshaping the foundations of recommendation through richer semantic understanding, stronger intent reasoning, and more flexible user interactions. The convergence of these two shifts prompts 
+==============================
+4 | 2026 | Mixture-of-Experts Knowledge Graph Retrieval-Augmented Generation for Multi-Agent LLM-based Recommendation
+   ids: {'ArXiv': '2605.28175', 'DOI': '10.1145/3770855.3817630'}
+   ABSTRACT: Large language models (LLMs) have recently been adopted for recommendations due to their ability to understand user intent and item semantics. However, LLM-based recommender systems often rely on parametric knowledge and suffer from outdated knowledge, motivating knowledge graph retrieval-augmented generation (KG-RAG) to ground recommendations on structured, up-to-date KGs. Despite this promise, effective KG-RAG in recommendations faces great challenges. First, users'queries vary in complexity and require KG knowledge at different granularities, whereas existing methods adopt a one-size-fits-a
+==============================
+5 | 2026 | DCGL: Dual-Channel Graph Learning with Large Language Models for Knowledge-Aware Recommendation
+   ids: {'ArXiv': '2605.07314'}
+   ABSTRACT: Knowledge Graphs (KGs) have proven highly effective for recommendation systems by capturing latent item relationships, while recent integration of Large Language Models (LLMs) has further enhanced semantic understanding and addressed knowledge sparsity issues. Nevertheless, current KG-and-LLM-based methods still face three main limitations: 1) inadequate modeling of implicit semantic relationships beyond explicit KG links; 2) suboptimal single-channel fusion of ID and LLM embeddings, which often leads to signal interference and blurred representations; and 3) insufficient consideration of user
+==============================
+6 | 2026 | LLMEKERec: Explainable Recommendation via Knowledge Graph Path Reasoning with LLMs
+   ids: {'DOI': '10.1109/icassp55912.2026.11463420'}
+   ABSTRACT: (none)
+==============================
+7 | 2026 | Structure Guided Retrieval-Augmented Generation for Factual Queries
+   ids: {'ArXiv': '2604.22843', 'DOI': '10.48550/arXiv.2604.22843'}
+   ABSTRACT: Retrieval-Augmented Generation (RAG) has been proposed to mitigate hallucinations in large language models (LLMs), where generated outputs may be factually incorrect. However, existing RAG approaches predominantly rely on vector similarity for retrieval, which is prone to semantic noise and fails to ensure that generated responses fully satisfy the complex conditions specified by factual queries, often leading to incorrect answers. To address this challenge, we introduce a novel research problem, named Exact Retrieval Problem (ERP). To the best of our knowledge, this is the first problem formu
+==============================
+8 | 2026 | Generative Archetype-Grounded Item Representations for Sequential Recommendation
+   ids: {'ArXiv': '2606.11023', 'DOI': '10.1145/3774904.3792587'}
+   ABSTRACT: Sequential recommendation aims to predict users' next interaction with items by analyzing their historical behavior. However, the limited quality of item representations remains a critical bottleneck. While pre-trained large language models (LLMs) can provide rich semantic representations, existing approaches only rely on static encoding of fixed attributes, overlooking the crucial role of target audiences in defining item identity. Moreover, the semantic space struggles to reflect actual user behavior, resulting in a significant gap between semantic representations and behavioral patterns. To
+==============================
+9 | 2026 | Curr-RLCER: Curriculum Reinforcement Learning for Coherence Explainable Recommendation
+   ids: {'ArXiv': '2604.05341', 'DOI': '10.1007/978-981-92-0363-5_29'}
+   ABSTRACT: Explainable recommendation systems (RSs) are designed to explicitly uncover the rationale of each recommendation, thereby enhancing the transparency and credibility of RSs. Previous methods often jointly predicted ratings and generated explanations, but overlooked the incoherence of such two objectives. To address this issue, we propose Curr-RLCER, a reinforcement learning framework for explanation coherent recommendation with dynamic rating alignment. It employs curriculum learning, transitioning from basic predictions (i.e., click through rating-CTR, selection-based rating) to open-ended rec
+==============================
+10 | 2026 | MMP-Refer: Multimodal Path Retrieval-augmented LLMs For Explainable Recommendation
+   ids: {'ArXiv': '2604.03666', 'DOI': '10.48550/arXiv.2604.03666'}
+   ABSTRACT: Explainable recommendations help improve the transparency and credibility of recommendation systems, and play an important role in personalized recommendation scenarios. At present, methods for explainable recommendation based on large language models(LLMs) often consider introducing collaborative information to enhance the personalization and accuracy of the model, but ignore the multimodal information in the recommendation dataset; In addition, collaborative information needs to be aligned with the semantic space of LLM. Introducing collaborative signals through retrieval paths is a good cho
+==============================
+11 | 2026 | Rank, Don't Generate: Statement-level Ranking for Explainable Recommendation
+   ids: {'ArXiv': '2604.03724', 'DOI': '10.1145/3805713.3820414'}
+   ABSTRACT: Textual explanations, generated with large language models (LLMs), are increasingly used to justify recommendations. Yet, evaluating these explanations remains a critical challenge. We advocate a shift in objective: rank, don't generate. We formalize explainable recommendation as a statement-level ranking problem, where systems rank candidate explanatory statements derived from reviews and return the top-k as explanation. This formulation mitigates hallucination by construction and enables fine-grained factual analysis. It also models factor importance through relevance scores and supports sta
+==============================
+12 | 2026 | LLM-guided data distillation for explainable recommender system
+   ids: {'DOI': '10.1007/s11227-026-08407-7'}
+   ABSTRACT: (none)
+==============================
+13 | 2026 | Can LLMs Fool Graph Learning? Exploring Universal Adversarial Attacks on Text-Attributed Graphs
+   ids: {'ArXiv': '2603.21155', 'DOI': '10.1145/3774904.3792502'}
+   ABSTRACT: Text-attributed graphs (TAGs) enhance graph learning by integrating rich textual semantics and topological context for each node. While boosting expressiveness, they also expose new vulnerabilities in graph learning through text-based adversarial surfaces. Recent advances leverage diverse backbones, such as graph neural networks (GNNs) and pre-trained language models (PLMs), to capture both structural and textual information in TAGs. This diversity raises a key question: How can we design universal adversarial attacks that generalize across architectures to assess the security of TAG models? T
+==============================
+14 | 2026 | MLLMRec-R1: Incentivizing Reasoning Capability in Large Language Models for Multimodal Sequential Recommendation
+   ids: {'ArXiv': '2603.06243', 'DOI': '10.48550/arXiv.2603.06243'}
+   ABSTRACT: Group relative policy optimization (GRPO) has become a standard post-training paradigm for improving reasoning and preference alignment in large language models (LLMs), and has recently shown strong effectiveness in LLM-based recommender systems. However, extending GRPO-based reasoning pipelines to multimodal sequential recommendation (MSR) with multimodal large language models (MLLMs) faces fundamental obstacles. First, MSR requires jointly encoding visual content for both historical interactions and multiple candidate items, causing visual tokens to dominate the input and making the cost of 
+==============================
+15 | 2026 | Hybrid Retrieval-Augmented Generation: Semantic and Structural Integration for Large Language Model Reasoning
+   ids: {'DOI': '10.3390/app16052244'}
+   ABSTRACT: Recent GraphRAG methods based on knowledge graphs (KGs) primarily rely on either under-reasoning or a structural path-level retriever, which prevents them from jointly capturing fine-grained semantic relevance and explicit multi-hop reasoning paths. This separation often results in semantic mismatch—where logical links are missing—or structural over-constraint in reasoning— where rigid dependencies limit flexible reasoning—thereby degrading both answer accuracy and the reliability of evidence in complex KGQA tasks. To address these issues, we propose HybRAG, a hybrid retrieval framework that s
+==============================
+16 | 2026 | IBCircuit: Towards Holistic Circuit Discovery with Information Bottleneck
+   ids: {'ArXiv': '2602.22581', 'DOI': '10.48550/arXiv.2602.22581'}
+   ABSTRACT: Circuit discovery has recently attracted attention as a potential research direction to explain the non-trivial behaviors of language models. It aims to find the computational subgraphs, also known as circuits, within the model that are responsible for solving specific tasks. However, most existing studies overlook the holistic nature of these circuits and require designing specific corrupted activations for different tasks, which is inaccurate and inefficient. In this work, we propose an end-to-end approach based on the principle of Information Bottleneck, called IBCircuit, to identify inform
+==============================
+17 | 2026 | A hybrid approach for course recommendation: leveraging collaborative filtering and knowledge graphs
+   ids: {'DOI': '10.1080/09540091.2026.2635259'}
+   ABSTRACT: (none)
+==============================
+18 | 2026 | TKG-Thinker: Towards Dynamic Reasoning over Temporal Knowledge Graphs via Agentic Reinforcement Learning
+   ids: {'ArXiv': '2602.05818', 'DOI': '10.48550/arXiv.2602.05818'}
+   ABSTRACT: Temporal knowledge graph question answering (TKGQA) aims to answer time-sensitive questions by leveraging temporal knowledge bases. While Large Language Models (LLMs) demonstrate significant potential in TKGQA, current prompting strategies constrain their efficacy in two primary ways. First, they are prone to reasoning hallucinations under complex temporal constraints. Second, static prompting limits model autonomy and generalization, as it lack optimization through dynamic interaction with temporal knowledge graphs (TKGs) environments. To address these limitations, we propose \textbf{TKG-Thin
+==============================
+19 | 2026 | Following the TRAIL: Predicting and Explaining Tomorrow's Hits with a Fine-Tuned LLM
+   ids: {'ArXiv': '2602.04225', 'DOI': '10.1145/3774904.3792616'}
+   ABSTRACT: Large Language Models (LLMs) have been widely applied across multiple domains for their broad knowledge and strong reasoning capabilities. However, applying them to recommendation systems is challenging since it is hard for LLMs to extract user preferences from large, sparse user-item logs, and real-time per-user ranking over the full catalog is too time-consuming to be practical. Moreover, many existing recommender systems focus solely on ranking items while overlooking explanations, which could help improve predictive accuracy and make recommendations more convincing to users. Inspired by re
+==============================
+20 | 2026 | MSCF-net: Multi-scale frequency denoising and co-frequency enhancement network for multimodal recommendation
+   ids: {'DOI': '10.1016/j.eswa.2026.131159'}
+   ABSTRACT: (none)
+==============================
+21 | 2025 | On the Factual Consistency of Text-based Explainable Recommendation Models
+   ids: {'ArXiv': '2512.24366', 'DOI': '10.48550/arXiv.2512.24366'}
+   ABSTRACT: Text-based explainable recommendation aims to generate natural-language explanations that justify item recommendations, to improve user trust and system transparency. Although recent advances leverage LLMs to produce fluent outputs, a critical question remains underexplored: are these explanations factually consistent with the available evidence? We introduce a comprehensive framework for evaluating the factual consistency of text-based explainable recommenders. We design a prompting-based pipeline that uses LLMs to extract atomic explanatory statements from reviews, thereby constructing a gro
+==============================
+22 | 2025 | KICR: A Two-Stage Framework for Knowledge-Aware Collaborative Representation Learning in LLM-Based Course Recommendation
+   ids: {'DOI': '10.1109/DSA66321.2025.00035'}
+   ABSTRACT: With the breakthrough advancements of Large Language Models (LLMs) in Natural Language Processing, their application to recommender systems has emerged as a highly promising research frontier. However, this integration faces a fundamental challenge: LLMs excel at understanding general semantic knowledge derived from vast text corpora, whereas the core of recommender systems lies in mining personalized collaborative filtering (CF) patterns from user interaction behaviors. This “semantic gap” between the two information modalities severely constrains the ability of LLMs to directly perceive and 
+==============================
+23 | 2025 | Grounded by Experience: Generative Healthcare Prediction Augmented with Hierarchical Agentic Retrieval
+   ids: {'ArXiv': '2511.13293', 'DOI': '10.48550/arXiv.2511.13293'}
+   ABSTRACT: Accurate healthcare prediction is critical for improving patient outcomes and reducing operational costs. Bolstered by growing reasoning capabilities, large language models (LLMs) offer a promising path to enhance healthcare predictions by drawing on their rich parametric knowledge. However, LLMs are prone to factual inaccuracies due to limitations in the reliability and coverage of their embedded knowledge. While retrieval-augmented generation (RAG) frameworks, such as GraphRAG and its variants, have been proposed to mitigate these issues by incorporating external knowledge, they face two key
+==============================
+24 | 2025 | A Survey on Generative Recommendation: Data, Model, and Tasks
+   ids: {'ArXiv': '2510.27157', 'DOI': '10.48550/arXiv.2510.27157'}
+   ABSTRACT: Recommender systems serve as foundational infrastructure in modern information ecosystems, helping users navigate digital content and discover items aligned with their preferences. At their core, recommender systems address a fundamental problem: matching users with items. Over the past decades, the field has experienced successive paradigm shifts, from collaborative filtering and matrix factorization in the machine learning era to neural architectures in the deep learning era. Recently, the emergence of generative models, especially large language models (LLMs) and diffusion models, have spar
+==============================
+25 | 2025 | Explainability of Large Language Models: Opportunities and Challenges toward Generating Trustworthy Explanations
+   ids: {'ArXiv': '2510.17256', 'DOI': '10.48550/arXiv.2510.17256'}
+   ABSTRACT: Large language models have exhibited impressive performance across a broad range of downstream tasks in natural language processing. However, how a language model predicts the next token and generates content is not generally understandable by humans. Furthermore, these models often make errors in prediction and reasoning, known as hallucinations. These errors underscore the urgent need to better understand and interpret the intricate inner workings of language models and how they generate predictive outputs. Motivated by this gap, this paper investigates local explainability and mechanistic i
+==============================
+26 | 2025 | MemWeaver: A Hierarchical Memory from Textual Interactive Behaviors for Personalized Generation
+   ids: {'ArXiv': '2510.07713', 'DOI': '10.1145/3774904.3792732'}
+   ABSTRACT: The primary form of user-internet engagement is shifting from leveraging implicit feedback signals, such as browsing and clicks, to harnessing the rich explicit feedback provided by textual interactive behaviors. This shift unlocks a rich source of user textual history, presenting a profound opportunity for a deeper form of personalization. However, prevailing approaches offer only a shallow form of personalization, as they treat user history as a flat list of texts for retrieval and fail to model the rich temporal and semantic structures reflecting dynamic nature of user interests. In this wo
+==============================
+27 | 2025 | Mesh Interpolation Graph Network for Dynamic and Spatially Irregular Global Weather Forecasting
+   ids: {'ArXiv': '2509.20911', 'DOI': '10.48550/arXiv.2509.20911'}
+   ABSTRACT: Graph neural networks have shown promising results in weather forecasting, which is critical for human activity such as agriculture planning and extreme weather preparation. However, most studies focus on finite and local areas for training, overlooking the influence of broader areas and limiting their ability to generalize effectively. Thus, in this work, we study global weather forecasting that is irregularly distributed and dynamically varying in practice, requiring the model to generalize to unobserved locations. To address such challenges, we propose a general Mesh Interpolation Graph Net
+==============================
+28 | 2025 | Using Explainable Techniques to Enhance Chain of Thoughts in LLMs
+   ids: {'DOI': '10.1109/eScience65000.2025.00052'}
+   ABSTRACT: With the recent advancements in reasoning capabilities with semantic understanding, Large Language Models (LLMs) are increasingly mimicking human reasoning processes and aligning more closely with human values. Yet, unlike how humans sometimes make decisions intuitively by reasoning or understanding the underlying logic, LLMs struggle with transparency in their internal reasoning. Similar to how humans often pause to analyze their reasoning step-by-step to understand their own decisions better, we propose enabling LLMs to perform analogous introspective reasoning using a Chain-of-Thought (CoT)
+==============================
+29 | 2025 | Explainable Knowledge Graph Retrieval-Augmented Generation (KG-RAG) with KG-SMILE
+   ids: {'ArXiv': '2509.03626', 'DOI': '10.48550/arXiv.2509.03626'}
+   ABSTRACT: Generative AI, such as Large Language Models (LLMs), has achieved impressive progress but still produces hallucinations and unverifiable claims, limiting reliability in sensitive domains. Retrieval-Augmented Generation (RAG) improves accuracy by grounding outputs in external knowledge, especially in domains like healthcare, where precision is vital. However, RAG remains opaque and essentially a black box, heavily dependent on data quality. We developed a method-agnostic, perturbation-based framework that provides token and component-level interoperability for Graph RAG using SMILE and named it
+==============================
+30 | 2025 | FS-KEN: Few-shot Knowledge Graph Reasoning by Adversarial Negative Enhancing
+   ids: {'DOI': '10.24963/ijcai.2025/512'}
+   ABSTRACT: Few-shot knowledge graph reasoning (FS-KGR) try to infer missing facts in a knowledge graphs using limited data (such as only 3/5 samples).Existing strategies have shown good performance by mining more supervised information for few-shot learning through meta-learning and self-supervised learning. However, the problem of insufficient samples has not been fundamentally solved. In this paper, we propose a novel algorithm based on adversarial learning for Enhancing Negative samples in few-shot scenarios of FS-KGR, termed FS-KEN. Specifically, we are the first to use GAN to conduct data augmentati
+==============================
+31 | 2025 | Learning to Shop Like Humans: A Review-driven Retrieval-Augmented Recommendation Framework with LLMs
+   ids: {'ArXiv': '2509.00698', 'DOI': '10.48550/arXiv.2509.00698'}
+   ABSTRACT: Large language models (LLMs) have shown strong potential in recommendation tasks due to their strengths in language understanding, reasoning and knowledge integration. These capabilities are especially beneficial for review-based recommendation, which relies on semantically rich user-generated texts to reveal fine-grained user preferences and item attributes. However, effectively incorporating reviews into LLM-based recommendation remains challenging due to (1) inefficient to dynamically utilize user reviews under LLMs'constrained context windows, and (2) lacking effective mechanisms to priori
+==============================
+32 | 2025 | How Reliable are LLMs for Reasoning on the Re-ranking task?
+   ids: {'ArXiv': '2508.18444', 'DOI': '10.48550/arXiv.2508.18444'}
+   ABSTRACT: With the improving semantic understanding capability of Large Language Models (LLMs), they exhibit a greater awareness and alignment with human values, but this comes at the cost of transparency. Although promising results are achieved via experimental analysis, an in-depth understanding of the LLM's internal workings is unavoidable to comprehend the reasoning behind the re-ranking, which provides end users with an explanation that enables them to make an informed decision. Moreover, in newly developed systems with limited user engagement and insufficient ranking data, accurately re-ranking co
+==============================
+33 | 2025 | From Nodes to Narratives: Explaining Graph Neural Networks with LLMs and Graph Context
+   ids: {'ArXiv': '2508.07117', 'DOI': '10.48550/arXiv.2508.07117'}
+   ABSTRACT: Graph Neural Networks (GNNs) have emerged as powerful tools for learning over structured data, including text-attributed graphs (TAGs), which are common in domains such as citation networks, social platforms, and knowledge graphs. GNNs are not inherently interpretable and thus, many explanation methods have been proposed. However, existing explanation methods often struggle to generate interpretable, fine-grained rationales, especially when node attributes include rich natural language. In this work, we introduce GSPELL, a lightweight, post-hoc framework that uses large language models (LLMs) 
+==============================
+34 | 2025 | Advancing Graph Foundation Models: A Data-Centric Perspective
+   ids: {'DOI': '10.1145/3711896.3736833'}
+   ABSTRACT: Recently, Graph Foundation Models (GFMs) have emerged as a significant research topic in graph machine learning. Compared with traditional graph neural networks, GFMs demonstrate impressive zero-shot generalization across different domains and tasks through large-scale pre-training on extensive and diverse graph data. Despite the initial success of pre-training, existing GFMs face challenges such as extreme time consumption and the presence of redundancy and noise in pre-training data. To alleviate these issues, we present the first exploration of data-centric GFM, which aims to optimize pre-t
+==============================
+35 | 2025 | CTEA: Camouflaged topological element attack via causal influence discovery
+   ids: {'DOI': '10.1016/j.eswa.2025.129160'}
+   ABSTRACT: (none)
+==============================
+36 | 2025 | GraphRAG-R1: Graph Retrieval-Augmented Generation with Process-Constrained Reinforcement Learning
+   ids: {'ArXiv': '2507.23581', 'DOI': '10.1145/3774904.3792589'}
+   ABSTRACT: Graph Retrieval-Augmented Generation (GraphRAG) has shown great effectiveness in enhancing the reasoning abilities of Large Language Models (LLMs) by leveraging graph structures for knowledge representation and modeling complex real-world relationships. However, existing GraphRAG methods still face significant bottlenecks when handling complex problems that require multi-hop reasoning, as their query and retrieval phases are largely based on pre-defined heuristics and do not fully utilize the reasoning potentials of LLMs. To address this problem, we propose GraphRAG-R1, an adaptive GraphRAG fr
+==============================
+37 | 2025 | Retrieval-Augmented Recommendation Explanation Generation with Hierarchical Aggregation
+   ids: {'ArXiv': '2507.09188', 'DOI': '10.48550/arXiv.2507.09188'}
+   ABSTRACT: Explainable Recommender System (ExRec) provides transparency to the recommendation process, increasing users'trust and boosting the operation of online services. With the rise of large language models (LLMs), whose extensive world knowledge and nuanced language understanding enable the generation of human-like, contextually grounded explanations, LLM-powered ExRec has gained great momentum. However, existing LLM-based ExRec models suffer from profile deviation and high retrieval overhead, hindering their deployment. To address these issues, we propose Retrieval-Augmented Recommendation Explana
+==============================
+38 | 2025 | ARAG: Agentic Retrieval Augmented Generation for Personalized Recommendation
+   ids: {'ArXiv': '2506.21931', 'DOI': '10.48550/arXiv.2506.21931'}
+   ABSTRACT: Retrieval-Augmented Generation (RAG) has shown promise in enhancing recommendation systems by incorporating external context into large language model prompts. However, existing RAG-based approaches often rely on static retrieval heuristics and fail to capture nuanced user preferences in dynamic recommendation scenarios. In this work, we introduce ARAG, an Agentic Retrieval-Augmented Generation framework for Personalized Recommendation, which integrates a multi-agent collaboration mechanism into the RAG pipeline. To better understand the long-term and session behavior of the user, ARAG leverag
+==============================
+39 | 2025 | Revisiting LoRA through the Lens of Parameter Redundancy: Spectral Encoding Helps
+   ids: {'ArXiv': '2506.16787', 'DOI': '10.48550/arXiv.2506.16787'}
+   ABSTRACT: Low-Rank Adaptation (LoRA) has emerged as a prominent technique for fine-tuning large foundation models. Despite its successes, the substantial parameter redundancy, which limits the capacity and efficiency of LoRA, has been recognized as a bottleneck. In this work, we systematically investigate the impact of redundancy in fine-tuning LoRA and reveal that reducing density redundancy does not degrade expressiveness. Based on this insight, we introduce \underline{S}pectral-\underline{e}ncoding \underline{L}ow-\underline{R}ank \underline{A}daptation (SeLoRA), which harnesses the robust expressive
+==============================
+40 | 2025 | How does Misinformation Affect Large Language Model Behaviors and Preferences?
+   ids: {'ArXiv': '2505.21608', 'DOI': '10.48550/arXiv.2505.21608'}
+   ABSTRACT: Large Language Models (LLMs) have shown remarkable capabilities in knowledge-intensive tasks, while they remain vulnerable when encountering misinformation. Existing studies have explored the role of LLMs in combating misinformation, but there is still a lack of fine-grained analysis on the specific aspects and extent to which LLMs are influenced by misinformation. To bridge this gap, we present MisBench, the current largest and most comprehensive benchmark for evaluating LLMs' behavior and knowledge preference toward misinformation. MisBench consists of 10,346,712 pieces of misinformation, wh
+==============================
+41 | 2025 | Mini-Game Lifetime Value Prediction in WeChat
+   ids: {'ArXiv': '2506.11037', 'DOI': '10.1145/3711896.3737248'}
+   ABSTRACT: The LifeTime Value (LTV) prediction, which endeavors to forecast the cumulative purchase contribution of a user to a particular item, remains a vital challenge that advertisers are keen to resolve. A precise LTV prediction system enhances the alignment of user interests with meticulously designed advertisements, thereby generating substantial profits for advertisers. Nonetheless, this issue is complicated by the paucity of data typically observed in real-world advertising scenarios. The purchase rate among registered users is often as critically low as 0.1%, resulting in a dataset where the ma
+==============================
+42 | 2025 | Integrating Large Language Models and Knowledge Graphs for Next-level AGI
+   ids: {'DOI': '10.1145/3701716.3715866'}
+   ABSTRACT: Large language models (LLMs), due to their emergent ability and generalizability, are making new waves in developing Artificial General Intelligence (AGI). However, LLMs are black-box models, which often fall short of capturing and accessing factual knowledge. In contrast, Knowledge Graphs (KGs) are structured knowledge models that explicitly store rich factual knowledge. KGs can enhance LLMs by providing external knowledge for inference and interpretability. Meanwhile, KGs are difficult to construct and evolve by nature, which challenges the existing methods in KGs to generate new facts and r
+==============================
+43 | 2025 | Retrieval-Augmented Purifier for Robust LLM-Empowered Recommendation
+   ids: {'ArXiv': '2504.02458', 'DOI': '10.1145/3795521'}
+   ABSTRACT: Recently, Large Language Model (LLM)-empowered recommender systems have revolutionized personalized recommendation frameworks and attracted extensive attention. Despite the remarkable success, existing LLM-empowered RecSys have been demonstrated to be highly vulnerable to minor perturbations. To mitigate the negative impact of such vulnerabilities, one potential solution is to employ collaborative signals based on item-item co-occurrence to purify the malicious collaborative knowledge from the user’s irrelevant historical interactions. On the other hand, due to the capabilities to expand insuf
+==============================
+44 | 2025 | InversionGNN: A Dual Path Network for Multi-Property Molecular Optimization
+   ids: {'ArXiv': '2503.01488', 'DOI': '10.48550/arXiv.2503.01488'}
+   ABSTRACT: Exploring chemical space to find novel molecules that simultaneously satisfy multiple properties is crucial in drug discovery. However, existing methods often struggle with trading off multiple properties due to the conflicting or correlated nature of chemical properties. To tackle this issue, we introduce InversionGNN framework, an effective yet sample-efficient dual-path graph neural network (GNN) for multi-objective drug discovery. In the direct prediction path of InversionGNN, we train the model for multi-property prediction to acquire knowledge of the optimal combination of functional gro
+==============================
+45 | 2025 | Rewarding Graph Reasoning Process makes LLMs more Generalized Reasoners
+   ids: {'ArXiv': '2503.00845', 'DOI': '10.1145/3711896.3737109'}
+   ABSTRACT: Despite significant advancements in Large Language Models (LLMs), developing advanced reasoning capabilities in LLMs remains a key challenge. Process Reward Models (PRMs) have demonstrated exceptional promise in enhancing reasoning by providing step-wise feedback, particularly in the context of mathematical reasoning. However, their application to broader reasoning domains remains understudied, largely due to the high costs associated with manually creating step-level supervision. In this work, we explore the potential of PRMs in graph reasoning problems - a domain that demands sophisticated m
+==============================
+46 | 2025 | GraphGPT-o: Synergistic Multimodal Comprehension and Generation on Graphs
+   ids: {'ArXiv': '2502.11925', 'DOI': '10.1109/CVPR52734.2025.01813'}
+   ABSTRACT: The rapid development of Multimodal Large Language Models (MLLMs) has enabled the integration of multiple modalities, including texts and images, within the large language model (LLM) framework. However, texts and images are usually interconnected, forming a multimodal attributed graph (MMAG). It is underexplored how MLLMs can incorporate the relational information (i.e., graph structure) and semantic information (i.e., texts and images) on such graphs for multimodal comprehension and generation. In this paper, we propose GraphGPT-o, which supports omni-multimodal understanding and creation on
+==============================
+47 | 2024 | Reasoning Over User Preferences: Knowledge Graph-Augmented LLMs for Explainable Conversational Recommendations
+   ids: {'ArXiv': '2411.14459', 'DOI': '10.1109/ICDM65498.2025.00159'}
+   ABSTRACT: Conversational Recommender Systems (CRSs) aim to provide personalized recommendations by capturing user preferences through interactive dialogues. Explainability in CRSs is crucial as it enables users to understand the reasoning behind recommendations, increasing system transparency and trustworthiness. However, current CRSs often leverage knowledge graphs (KGs) or language models to extract and represent user preferences as latent vectors, which limits their explainability. Large language models (LLMs) offer powerful reasoning capabilities that can bridge this gap by generating human-understa
+==============================
+48 | 2024 | Graph-constrained Reasoning: Faithful Reasoning on Knowledge Graphs with Large Language Models
+   ids: {'ArXiv': '2410.13080', 'DOI': '10.48550/arXiv.2410.13080'}
+   ABSTRACT: Large language models (LLMs) have demonstrated impressive reasoning abilities, but they still struggle with faithful reasoning due to knowledge gaps and hallucinations. To address these issues, knowledge graphs (KGs) have been utilized to enhance LLM reasoning through their structured knowledge. However, existing KG-enhanced methods, either retrieval-based or agent-based, encounter difficulties in accurately retrieving knowledge and efficiently traversing KGs at scale. In this work, we introduce graph-constrained reasoning (GCR), a novel framework that bridges structured knowledge in KGs with 
+==============================
+49 | 2024 | Parameter-Efficient Fine-Tuning via Circular Convolution
+   ids: {'ArXiv': '2407.19342', 'DOI': '10.48550/arXiv.2407.19342'}
+   ABSTRACT: Low-Rank Adaptation (LoRA) has gained popularity for fine-tuning large foundation models, leveraging low-rank matrices $\mathbf{A}$ and $\mathbf{B}$ to represent weight changes (i.e., $\Delta \mathbf{W} = \mathbf{B} \mathbf{A}$). This method reduces trainable parameters and mitigates heavy memory consumption associated with full delta matrices by sequentially multiplying $\mathbf{A}$ and $\mathbf{B}$ with the activation. Despite its success, the intrinsic low-rank characteristic may limit its performance. Although several variants have been proposed to address this issue, they often overlook t
+==============================
+50 | 2026 | Graph Neural Networks for Collaborative Filtering: A Survey on Ranking Prediction
+   ids: {'DOI': '10.1109/ACCESS.2026.3656421'}
+   ABSTRACT: Recommender systems have undergone more than three decades of continuous development, evolving from early collaborative filtering techniques and matrix factorization to the integration of deep learning methods. In recent years, ranking prediction in collaborative filtering has attracted particular attention, as it directly impacts personalization quality in domains such as e-commerce, social media, and multimedia services. Among various approaches, Graph Neural Networks have emerged as a dominant paradigm, owing to their inherent ability to model high-order user–item relationships. This survey
+==============================
+51 | 2026 | Faico: Faithful and Complete Knowledge Graph Augmented Reasoning
+   ids: {'DOI': '10.1145/3770854.3780336'}
+   ABSTRACT: (none)
