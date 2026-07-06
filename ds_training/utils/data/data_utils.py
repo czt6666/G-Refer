@@ -102,11 +102,14 @@ class PromptDataset(Dataset):
 
     def __getitem__(self, idx):
         if self.train_phase == 1:
-            return {
+            item = {
                 "input_ids": self.chosen_dataset[idx]["input_ids"],
                 "attention_mask": self.chosen_dataset[idx]["attention_mask"],
                 "labels": self.chosen_dataset[idx]["input_ids"]
             }
+            if "subgraph_embed" in self.chosen_dataset[idx]:
+                item["subgraph_embed"] = self.chosen_dataset[idx]["subgraph_embed"]
+            return item
         elif self.train_phase == 2:
             return self.chosen_dataset[idx]["input_ids"], self.chosen_dataset[idx]["attention_mask"], \
                 self.reject_dataset[idx]["input_ids"], self.reject_dataset[idx]["attention_mask"]
@@ -116,11 +119,13 @@ class PromptDataset(Dataset):
 
 
 def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
-                         end_of_conversation_token, max_seq_len):
+                         end_of_conversation_token, max_seq_len,
+                         subgraph_embeds=None):
     prompt_dataset = []
     chosen_dataset = []
     reject_dataset = []
     if train_phase == 1:
+        missing_embed = 0
         for i, tmp_data in enumerate(current_dataset):
             # tokenize the text
             chosen_sentence = raw_dataset.get_prompt_and_chosen(
@@ -135,10 +140,20 @@ def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
                 chosen_token["input_ids"] = chosen_token["input_ids"].squeeze(0)
                 chosen_token["attention_mask"] = chosen_token[
                     "attention_mask"].squeeze(0)
+                if subgraph_embeds is not None:
+                    key = f"{tmp_data['uid']}-{tmp_data['iid']}"
+                    embed = subgraph_embeds.get(key)
+                    if embed is None:
+                        missing_embed += 1
+                        embed = subgraph_embeds['__zero__']
+                    chosen_token["subgraph_embed"] = embed
                 chosen_dataset.append(chosen_token)
         print(
             f'Creating dataset {raw_dataset.dataset_name_clean} for train_phase={train_phase} size={len(chosen_dataset)}'
         )
+        if subgraph_embeds is not None:
+            print(f'  subgraph_embed: {missing_embed}/{len(chosen_dataset)} '
+                  f'pairs had no precomputed embedding (used zero vector)')
 
     elif train_phase == 2:
         for i, tmp_data in enumerate(current_dataset):
@@ -193,7 +208,7 @@ def create_dataset_split(current_dataset, raw_dataset, train_phase, tokenizer,
 
 def create_dataset(local_rank, dataset_name, data_split, output_path,
                    train_phase, seed, tokenizer, end_of_conversation_token,
-                   max_seq_len):
+                   max_seq_len, subgraph_embeds=None):
     raw_dataset = get_raw_dataset(dataset_name, output_path, seed, local_rank)
     train_dataset = raw_dataset.get_train_data()
     train_index = get_raw_dataset_split_index(local_rank, output_path,
@@ -205,7 +220,7 @@ def create_dataset(local_rank, dataset_name, data_split, output_path,
     train_dataset = create_dataset_split(train_dataset, raw_dataset,
                                          train_phase, tokenizer,
                                          end_of_conversation_token,
-                                         max_seq_len)
+                                         max_seq_len, subgraph_embeds)
 
     eval_dataset = raw_dataset.get_eval_data()
     eval_index = get_raw_dataset_split_index(local_rank, output_path,
@@ -216,7 +231,7 @@ def create_dataset(local_rank, dataset_name, data_split, output_path,
     eval_dataset = Subset(eval_dataset, eval_index)
     eval_dataset = create_dataset_split(eval_dataset, raw_dataset, train_phase,
                                         tokenizer, end_of_conversation_token,
-                                        max_seq_len)
+                                        max_seq_len, subgraph_embeds)
     return train_dataset, eval_dataset
 
 
@@ -230,7 +245,8 @@ def create_prompt_dataset(local_rank,
                           max_seq_len,
                           end_of_conversation_token="<|endoftext|>",
                           sft_only_data_path=[],
-                          reload=False):
+                          reload=False,
+                          subgraph_embeds=None):
     """
     Creates the prompt dataset
     """
@@ -238,7 +254,8 @@ def create_prompt_dataset(local_rank,
     fname = "_".join(data_path)
     sft_cache_key = "_".join(sft_only_data_path)
     tokenizer_name = tokenizer.init_kwargs["name_or_path"].replace("/", "_")
-    fname = f"{fname}_split{data_split}_phase{train_phase}_seed{seed}_tokenizer{tokenizer_name}_seqlen{max_seq_len}_sft{sft_cache_key}"
+    subgraph_key = "subgraph" if subgraph_embeds is not None else "nosubgraph"
+    fname = f"{fname}_split{data_split}_phase{train_phase}_seed{seed}_tokenizer{tokenizer_name}_seqlen{max_seq_len}_sft{sft_cache_key}_{subgraph_key}"
     fname = "_".join(fname.split("/"))
     fname = hashlib.sha256(fname.encode()).hexdigest(
     )  # hash the file name to avoid too long file name
@@ -254,7 +271,8 @@ def create_prompt_dataset(local_rank,
         if len(data_path) == 1:  # Single dataset.
             train_dataset, eval_dataset = create_dataset(
                 local_rank, data_path[0], data_split, output_path, train_phase,
-                seed, tokenizer, end_of_conversation_token, max_seq_len)
+                seed, tokenizer, end_of_conversation_token, max_seq_len,
+                subgraph_embeds)
         else:  # Blending datasets.
             train_datasets = []
             eval_datasets = []

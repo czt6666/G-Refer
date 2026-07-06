@@ -35,6 +35,11 @@ from utils.ds_utils import get_train_ds_config
 from utils.module.lora import convert_linear_layer_to_lora, convert_lora_to_linear_layer, unfuse_lora_layer, only_optimize_lora_parameters
 from utils.model.model_utils import create_hf_model
 
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir,
+                                 os.path.pardir, 'subgraph_retriever')))
+from subgraph_encoder import SubgraphProjector, prepend_soft_prompt  # noqa: E402
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -166,6 +171,20 @@ def parse_args():
     parser.add_argument('--only_optimize_lora',
                         action='store_true',
                         help='Only optimize the LoRA parameters.')
+    ## Phase 3: subgraph soft-prompt (K-RagRec, arXiv:2501.02226)
+    parser.add_argument(
+        '--subgraph_embed_path',
+        type=str,
+        default=None,
+        help='Path to a precomputed {uid}-{iid} -> subgraph embedding dict '
+        '(see subgraph_retriever/extract_subgraph_embeds.py). If set, '
+        'prepends a projected soft-prompt token to every training example '
+        'and trains the projector jointly with LoRA. Default (unset) '
+        'leaves training unchanged.')
+    parser.add_argument('--subgraph_dim',
+                        type=int,
+                        default=256,
+                        help='Dimensionality of the precomputed subgraph embeddings.')
     parser = deepspeed.add_config_arguments(parser)
     args = parser.parse_args()
 
@@ -176,6 +195,32 @@ def parse_args():
         ), "--gradient_checkpointing and --only_optimize_lora cannot be enabled at the same time."
 
     return args
+
+
+def build_model_inputs(model, batch, projector):
+    """If `batch` carries a `subgraph_embed` (Phase 3 soft-prompt, see
+    --subgraph_embed_path), project it and prepend it as one extra token to
+    the input embeddings, switching the call from input_ids to inputs_embeds.
+    Otherwise return `batch` unchanged (original G-Refer behavior).
+    """
+    subgraph_embed = batch.pop('subgraph_embed', None)
+    if projector is None or subgraph_embed is None:
+        return batch
+
+    input_ids = batch.pop('input_ids')
+    attention_mask = batch.pop('attention_mask')
+    labels = batch.pop('labels', None)
+
+    projector_dtype = next(projector.parameters()).dtype
+    soft_embed = projector(subgraph_embed.to(projector_dtype))
+    inputs_embeds = model.get_input_embeddings()(input_ids)
+    inputs_embeds, attention_mask, labels = prepend_soft_prompt(
+        inputs_embeds, attention_mask, labels, soft_embed)
+
+    model_inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
+    if labels is not None:
+        model_inputs["labels"] = labels
+    return model_inputs
 
 
 def smart_tokenizer_and_embedding_resize(
@@ -276,10 +321,27 @@ def main():
                                              args.lora_dim)
         if args.only_optimize_lora:
             model = only_optimize_lora_parameters(model)
-    
+
+    subgraph_embeds = None
+    subgraph_projector = None
+    if args.subgraph_embed_path is not None:
+        # Attach the projector AFTER only_optimize_lora_parameters() (which
+        # would otherwise freeze it, since it isn't a LoRA layer) so it's
+        # trainable by construction and picked up by model.named_parameters()
+        # / get_optimizer_grouped_parameters() below.
+        subgraph_projector = SubgraphProjector(args.subgraph_dim,
+                                               model.config.hidden_size)
+        model.subgraph_projector = subgraph_projector
+
+        subgraph_embeds = torch.load(args.subgraph_embed_path, map_location='cpu')
+        subgraph_embeds['__zero__'] = torch.zeros(args.subgraph_dim)
+        print_rank_0(
+            f'loaded {len(subgraph_embeds) - 1} subgraph embeddings from '
+            f'{args.subgraph_embed_path}', args.global_rank)
+
     total_num = sum(p.numel() for p in model.parameters())
     trainable_num = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print('Total', total_num, 'Trainable', trainable_num)   
+    print('Total', total_num, 'Trainable', trainable_num)
 
     # Prepare the data
     train_phase = 1
@@ -293,7 +355,8 @@ def main():
         tokenizer,
         args.max_seq_len,
         end_of_conversation_token = tokenizer.eos_token,
-        sft_only_data_path=args.sft_only_data_path)
+        sft_only_data_path=args.sft_only_data_path,
+        subgraph_embeds=subgraph_embeds)
     # DataLoaders creation:
     if args.local_rank == -1:
         train_sampler = RandomSampler(train_dataset)
@@ -315,8 +378,9 @@ def main():
         losses = 0
         for step, batch in enumerate(eval_dataloader):
             batch = to_device(batch, device)
+            model_inputs = build_model_inputs(model, batch, subgraph_projector)
             with torch.no_grad():
-                outputs = model(**batch)
+                outputs = model(**model_inputs)
 
             loss = outputs.loss
             losses += loss.float()
@@ -384,7 +448,8 @@ def main():
             batch = to_device(batch, device)
             # print("batch:")
             # print(batch)
-            outputs = model(**batch, use_cache=False)
+            model_inputs = build_model_inputs(model, batch, subgraph_projector)
+            outputs = model(**model_inputs, use_cache=False)
             loss = outputs.loss
             mean_loss += loss.item()
             steps += 1
