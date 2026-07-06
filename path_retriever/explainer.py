@@ -6,6 +6,7 @@ from tqdm.auto import tqdm
 from collections import defaultdict
 from utils import get_ntype_hetero_nids_to_homo_nids, get_homo_nids_to_ntype_hetero_nids, get_ntype_pairs_to_cannonical_etypes
 from utils import hetero_src_tgt_khop_in_subgraph, get_neg_path_score_func, k_shortest_paths_with_max_length
+from utils import graph_powering_paths
 
 def get_edge_mask_dict(ghetero):
     '''
@@ -185,18 +186,26 @@ class PaGELink(nn.Module):
                  num_epochs=100,
                  alpha=1.0,
                  beta=1.0,
-                 log=False):
+                 log=False,
+                 path_method='dijkstra'):
         super(PaGELink, self).__init__()
         self.model = model
         self.src_ntype = model.src_ntype
         self.tgt_ntype = model.tgt_ntype
-        
+
         self.lr = lr
         self.num_epochs = num_epochs
         self.alpha = alpha
         self.beta = beta
         self.log = log
-        
+
+        assert path_method in ('dijkstra', 'power'), \
+            "path_method must be 'dijkstra' (original PaGE-Link) or " \
+            "'power' (Power-Link graph-powering, arXiv:2401.02290)"
+        self.path_method = path_method
+        # set per-call in `explain`, used by `path_loss`'s power-method branch
+        self._path_loss_max_length = 5
+
         self.all_loss = defaultdict(list)
 
     def _init_masks(self, ghetero):
@@ -282,12 +291,21 @@ class PaGELink(nn.Module):
         loss : Tensor
             The path loss
         """
-        neg_path_score_func = get_neg_path_score_func(g, 'eweight', [src_nid, tgt_nid])
-        paths = k_shortest_paths_with_max_length(g, 
-                                                 src_nid, 
-                                                 tgt_nid, 
-                                                 weight=neg_path_score_func, 
-                                                 k=num_paths)
+        if self.path_method == 'power':
+            paths = graph_powering_paths(g,
+                                         src_nid,
+                                         tgt_nid,
+                                         weight='eweight',
+                                         k=num_paths,
+                                         max_length=self._path_loss_max_length,
+                                         exclude_node=[src_nid, tgt_nid])
+        else:
+            neg_path_score_func = get_neg_path_score_func(g, 'eweight', [src_nid, tgt_nid])
+            paths = k_shortest_paths_with_max_length(g,
+                                                     src_nid,
+                                                     tgt_nid,
+                                                     weight=neg_path_score_func,
+                                                     k=num_paths)
 
         eids_on_path = get_eids_on_paths(paths, g)
 
@@ -450,13 +468,22 @@ class PaGELink(nn.Module):
         homo_src_nid = ntype_hetero_nids_to_homo_nids[(self.src_ntype, int(src_nid))]
         homo_tgt_nid = ntype_hetero_nids_to_homo_nids[(self.tgt_ntype, int(tgt_nid))]
 
-        neg_path_score_func = get_neg_path_score_func(ghomo, 'eweight', [src_nid.item(), tgt_nid.item()])
-        homo_paths = k_shortest_paths_with_max_length(ghomo, 
-                                                       homo_src_nid, 
-                                                       homo_tgt_nid,
-                                                       weight=neg_path_score_func,
-                                                       k=num_paths,
-                                                       max_length=max_path_length)
+        if self.path_method == 'power':
+            homo_paths = graph_powering_paths(ghomo,
+                                              homo_src_nid,
+                                              homo_tgt_nid,
+                                              weight='eweight',
+                                              k=num_paths,
+                                              max_length=max_path_length,
+                                              exclude_node=[homo_src_nid, homo_tgt_nid])
+        else:
+            neg_path_score_func = get_neg_path_score_func(ghomo, 'eweight', [src_nid.item(), tgt_nid.item()])
+            homo_paths = k_shortest_paths_with_max_length(ghomo,
+                                                           homo_src_nid,
+                                                           homo_tgt_nid,
+                                                           weight=neg_path_score_func,
+                                                           k=num_paths,
+                                                           max_length=max_path_length)
 
         paths = []
         homo_nids_to_ntype_hetero_nids = get_homo_nids_to_ntype_hetero_nids(ghetero)
@@ -544,15 +571,18 @@ class PaGELink(nn.Module):
         (optional) edge_mask_dict : dict
             key=`etype`, value=torch.nn.Parameter with size being the number of `etype` edges
         """
+        # Used by path_loss()'s power-method branch during mask learning below.
+        self._path_loss_max_length = max_path_length
+
         # Extract the computation graph (k-hop subgraph)
-        (comp_g_src_nid, 
-         comp_g_tgt_nid, 
-         comp_g, 
-         comp_g_feat_nids) = hetero_src_tgt_khop_in_subgraph(self.src_ntype, 
-                                                             src_nid, 
-                                                             self.tgt_ntype, 
-                                                             tgt_nid, 
-                                                             ghetero, 
+        (comp_g_src_nid,
+         comp_g_tgt_nid,
+         comp_g,
+         comp_g_feat_nids) = hetero_src_tgt_khop_in_subgraph(self.src_ntype,
+                                                             src_nid,
+                                                             self.tgt_ntype,
+                                                             tgt_nid,
+                                                             ghetero,
                                                              num_hops)
         # Learn the edge mask on the computation graph
         comp_g_edge_mask_dict = self.get_edge_mask(comp_g_src_nid, 

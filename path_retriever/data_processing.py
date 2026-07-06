@@ -61,8 +61,13 @@ def process_data(g,
         src_tgt_indices = []
         for etype in g.canonical_etypes:
             if etype[0] == src_ntype and etype[2] == tgt_ntype:
-                adj = g.adj(etype=etype)
-                src_tgt_index = adj.coalesce().indices()        
+                # Equivalent to g.adj(etype=etype).coalesce().indices(), but
+                # avoids dgl's C++ sparse backend (dgl.sparse), whose bundled
+                # .so is only built for torch up to 2.2.1 while this env runs
+                # torch 2.4.1 (upgraded for ds_training/). Plain edge lookup
+                # + dedup gives the same (src, dst) index pairs.
+                etype_u, etype_v = g.edges(etype=etype)
+                src_tgt_index = torch.unique(torch.stack([etype_u, etype_v]), dim=1)
                 src_tgt_indices += [src_tgt_index]
         src_tgt_u, src_tgt_v = torch.cat(src_tgt_indices, dim=1)
 

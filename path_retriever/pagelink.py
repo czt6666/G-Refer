@@ -71,7 +71,10 @@ parser.add_argument('--max_path_length', type=int, default=5, help='max lenght o
 parser.add_argument('--k_core', type=int, default=2, help='k for the k-core graph') 
 parser.add_argument('--prune_max_degree', type=int, default=200,
                     help='prune the graph such that all nodes have degree smaller than max_degree. No prune if -1') 
-parser.add_argument('--save_explanation', default=False, action='store_true', 
+parser.add_argument('--path_method', type=str, default='dijkstra', choices=['dijkstra', 'power'],
+                    help="'dijkstra' = original PaGE-Link Yen's k-shortest-paths; "
+                         "'power' = Power-Link graph-powering (arXiv:2401.02290)")
+parser.add_argument('--save_explanation', default=False, action='store_true',
                     help='Whether to save the explanation')
 parser.add_argument('--saved_explanation_dir', type=str, default='saved_explanations',
                     help='directory of saved explanations')
@@ -109,12 +112,13 @@ model = HeteroLinkPredictionModel(encoder, args.src_ntype, args.tgt_ntype, args.
 state = torch.load(f'{args.saved_model_dir}/{args.saved_model_name}_{args.split}.pth', map_location='cpu')
 model.load_state_dict(state)
 
-pagelink = PaGELink(model, 
+pagelink = PaGELink(model,
                     lr=args.lr,
-                    alpha=args.alpha, 
-                    beta=args.beta, 
+                    alpha=args.alpha,
+                    beta=args.beta,
                     num_epochs=args.num_epochs,
-                    log=True).to(device)
+                    log=True,
+                    path_method=args.path_method).to(device)
 
 
 test_src_nids, test_tgt_nids = test_pos_g.edges()
