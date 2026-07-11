@@ -31,10 +31,10 @@ def load(dataset):
             # NOTE: identical to metrics.py — data=ground-truth chosen,
             # ref=model generation. Kept verbatim for paper comparability.
             data.append(s["source_data"]["chosen"].split("### ")[1])
-            if "###" in s["output_str"]:
-                ref.append(s["output_str"].split("### ")[1])
-            else:
-                ref.append(s["output_str"])
+            # generation can get cut off by max_new_tokens exactly at "###"
+            # with no trailing space (split("### ") then yields only 1 part)
+            parts = s["output_str"].split("### ")
+            ref.append(parts[1] if len(parts) > 1 else s["output_str"])
     return data, ref
 
 
