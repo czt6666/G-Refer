@@ -1,26 +1,17 @@
-"""Phase 1 real generation-quality comparison: Dijkstra vs Power-Link.
+"""Retrieve paths with one method (dijkstra or power) and write infer prompts.
 
-Takes a real sample of (uid, iid) test pairs from raft_data/yelp/test.json
-(which already have a real prompt + ground-truth chosen explanation from the
-original G-Refer pipeline), re-retrieves the "related paths" segment using
-BOTH path_method=dijkstra and path_method=power on the same synthetic graph
-(see experiments/phase0,phase1/result.md for why it's synthetic -- the real
-buys/likes-distinguishing raw data was never part of the public release),
-serializes with the exact template code/translation.py uses (so format
-matches what the model was trained on), and splices the new path text into
-the ORIGINAL prompt in place of the original path segment -- keeping the
-business/user profile and node-retrieval segments identical, so the retrieval
-method is the only variable that differs between the two output files.
-
-Output: two new test.json-format files (one per method), ready for
-ds_inference/infer.py, so both can be run through the SAME already-trained
-Llama-3-8B checkpoint and compared with evaluation/eval_lite.py.
+Example:
+  python phase1_quality_compare.py --method power --n_samples 3000 \\
+      --output_dir ../convert_files/phase1_test3000 --resume
 """
 import argparse
 import json
 import os
+import random
 import sys
 import time
+from datetime import datetime
+
 import torch
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, 'code')))
@@ -37,7 +28,6 @@ PATH_TEMPLATE = ("For the given user-item pair, here are several related paths "
 
 
 def serialize_paths(paths, mapper, k=2):
-    """Matches code/translation.py's flatten_pagelink_retrieval_results exactly."""
     top_paths = paths[:k]
     path_prompts = []
     for idx, path in enumerate(top_paths, 1):
@@ -63,31 +53,51 @@ def serialize_paths(paths, mapper, k=2):
 
 
 def splice_prompt(original_prompt, new_path_text):
-    # new_path_text already starts with PATH_TEMPLATE (from serialize_paths),
-    # so the prefix must stop BEFORE the marker, not include it, or the
-    # template text would appear twice.
     prefix = original_prompt.split(PATH_MARKER)[0]
     return prefix + "\n### " + new_path_text + "\n### Explanation:"
 
 
+def _count_lines(path):
+    if not os.path.exists(path):
+        return 0
+    with open(path) as f:
+        return sum(1 for _ in f)
+
+
+def _pct(sorted_vals, q):
+    if not sorted_vals:
+        return None
+    return sorted_vals[min(int(len(sorted_vals) * q), len(sorted_vals) - 1)]
+
+
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument('--method', required=True, choices=['dijkstra', 'power'])
     p.add_argument('--dataset', default='yelp')
-    p.add_argument('--n_samples', type=int, default=500)
+    p.add_argument('--n_samples', type=int, default=3000)
     p.add_argument('--seed', type=int, default=1234)
     p.add_argument('--num_paths', type=int, default=2)
     p.add_argument('--max_path_length', type=int, default=5)
     p.add_argument('--num_hops', type=int, default=2)
     p.add_argument('--k_core', type=int, default=2)
     p.add_argument('--prune_max_degree', type=int, default=200)
-    p.add_argument('--output_dir', default='convert_files/phase1_quality')
-    p.add_argument('--shard_id', type=int, default=0, help='process sample[shard_id::num_shards] only, for parallel sharding')
-    p.add_argument('--num_shards', type=int, default=1)
+    p.add_argument('--num_epochs', type=int, default=10)
+    p.add_argument('--output_dir', default='../convert_files/phase1_test3000')
+    p.add_argument('--resume', action='store_true')
+    p.add_argument('--log_every', type=int, default=50)
     args = p.parse_args()
 
+    method = args.method
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-    mapper = DataMapper(os.path.join(root, 'data', args.dataset, 'data_trn.pt'))
+    out_dir = args.output_dir
+    if not os.path.isabs(out_dir):
+        out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), out_dir))
+    os.makedirs(out_dir, exist_ok=True)
 
+    started = datetime.now().isoformat(timespec='seconds')
+    print(f'[START] method={method} time={started}', flush=True)
+
+    mapper = DataMapper(os.path.join(root, 'data', args.dataset, 'data_trn.pt'))
     processed_g = load_dataset(os.path.join(os.path.dirname(__file__), 'datasets'),
                                args.dataset, 'trn', 0.1, 0.2, 'step1')[1]
     mp_g = processed_g[0]
@@ -105,64 +115,116 @@ def main():
     raw_pairs = []
     with open(os.path.join(root, 'raft_data', args.dataset, 'test.json')) as f:
         for line in f:
-            raw_pairs.append(json.loads(line))
+            if line.strip():
+                raw_pairs.append(json.loads(line))
 
-    import random
     random.seed(args.seed)
     sample = random.sample(raw_pairs, min(args.n_samples, len(raw_pairs)))
-    if args.num_shards > 1:
-        sample = sample[args.shard_id::args.num_shards]
+    sample.sort(key=lambda r: (r['uid'], r['iid']))
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    suffix = f'.shard{args.shard_id}' if args.num_shards > 1 else ''
-    out_files = {m: open(os.path.join(args.output_dir, f'test_{m}{suffix}.json'), 'w')
-                for m in ('dijkstra', 'power')}
-    timings = {m: [] for m in ('dijkstra', 'power')}
-    n_empty = {m: 0 for m in ('dijkstra', 'power')}
-    n_written = 0
+    out_path = os.path.join(out_dir, f'test_{method}.json')
+    timing_path = os.path.join(out_dir, f'timing_{method}.jsonl')
+    start_i = _count_lines(out_path) if args.resume else 0
+    if start_i:
+        print(f'resume from {start_i}', flush=True)
 
-    for row in sample:
-        uid, iid = row['uid'], row['iid']
-        if uid >= num_users or iid >= num_items:
-            continue
+    mode = 'a' if start_i > 0 else 'w'
+    out_f = open(out_path, mode)
+    timing_f = open(timing_path, mode)
+    times = []
+    n_empty = 0
 
-        row_out = {}
-        for method in ('dijkstra', 'power'):
+    if args.resume and start_i > 0 and os.path.exists(timing_path):
+        with open(timing_path) as f:
+            for i, line in enumerate(f):
+                if i >= start_i:
+                    break
+                rec = json.loads(line)
+                times.append(rec['time_s'])
+                if rec.get('empty'):
+                    n_empty += 1
+
+    n_written = start_i
+    t_wall0 = time.perf_counter()
+    try:
+        for idx, row in enumerate(sample):
+            if idx < start_i:
+                continue
+            uid, iid = row['uid'], row['iid']
+            if uid >= num_users or iid >= num_items:
+                continue
+
             pagelink = PaGELink(model, lr=0.01, alpha=1.0, beta=1.0,
-                                num_epochs=10, log=False, path_method=method)
+                                num_epochs=args.num_epochs, log=False,
+                                path_method=method)
             src_nid = torch.tensor([uid])
             tgt_nid = torch.tensor([iid])
             t0 = time.perf_counter()
             try:
-                paths = pagelink.explain(src_nid, tgt_nid, mp_g,
-                                         num_hops=args.num_hops,
-                                         prune_max_degree=args.prune_max_degree,
-                                         k_core=args.k_core,
-                                         num_paths=args.num_paths,
-                                         max_path_length=args.max_path_length)
-            except Exception as e:
+                paths = pagelink.explain(
+                    src_nid, tgt_nid, mp_g,
+                    num_hops=args.num_hops,
+                    prune_max_degree=args.prune_max_degree,
+                    k_core=args.k_core,
+                    num_paths=args.num_paths,
+                    max_path_length=args.max_path_length)
+            except Exception:
                 paths = []
-            timings[method].append(time.perf_counter() - t0)
-            if not paths or not paths[0]:
-                n_empty[method] += 1
+            dt = time.perf_counter() - t0
+            times.append(dt)
+            empty = (not paths) or (not paths[0])
+            if empty:
+                n_empty += 1
+
             path_text = serialize_paths(paths, mapper, k=args.num_paths)
-            new_prompt = splice_prompt(row['prompt'], path_text)
-            row_out[method] = {**row, 'prompt': new_prompt}
+            new_row = {**row, 'prompt': splice_prompt(row['prompt'], path_text)}
+            out_f.write(json.dumps(new_row) + '\n')
+            out_f.flush()
+            timing_f.write(json.dumps({
+                'uid': uid, 'iid': iid, 'time_s': dt, 'empty': empty
+            }) + '\n')
+            timing_f.flush()
+            n_written += 1
 
-        for method in ('dijkstra', 'power'):
-            out_files[method].write(json.dumps(row_out[method]) + '\n')
-        n_written += 1
-        if n_written % 50 == 0:
-            print(f'{n_written}/{len(sample)}')
+            if n_written % args.log_every == 0:
+                elapsed = time.perf_counter() - t_wall0
+                recent = times[-args.log_every:]
+                print(f'{n_written}/{len(sample)} wall={elapsed:.0f}s '
+                      f'recent_mean={sum(recent)/len(recent):.3f}s', flush=True)
+    finally:
+        out_f.close()
+        timing_f.close()
 
-    for f in out_files.values():
-        f.close()
+    ended = datetime.now().isoformat(timespec='seconds')
+    ts = sorted(times)
+    summary = {
+        'method': method,
+        'n': len(times),
+        'n_written': n_written,
+        'total_s': sum(times) if times else 0.0,
+        'mean_s': (sum(times) / len(times)) if times else None,
+        'min_s': ts[0] if ts else None,
+        'max_s': ts[-1] if ts else None,
+        'p50_s': _pct(ts, 0.50),
+        'p95_s': _pct(ts, 0.95),
+        'empty_paths': n_empty,
+        'empty_rate': (n_empty / n_written) if n_written else 0.0,
+        'start_time': started,
+        'end_time': ended,
+        'seed': args.seed,
+        'n_requested': args.n_samples,
+    }
+    summary_path = os.path.join(out_dir, f'timing_{method}_summary.json')
+    with open(summary_path, 'w') as f:
+        json.dump(summary, f, indent=2)
 
-    print(f'wrote {n_written} pairs per method to {args.output_dir}/test_{{dijkstra,power}}.json')
-    for method in ('dijkstra', 'power'):
-        t = timings[method]
-        print(f'[{method}] mean={sum(t)/len(t):.4f}s total={sum(t):.2f}s '
-             f'empty_paths={n_empty[method]}/{n_written}')
+    print(f'[END] method={method} time={ended}', flush=True)
+    print(f'wrote {n_written} -> {out_path}', flush=True)
+    print(f'timing -> {summary_path}', flush=True)
+    if times:
+        print(f"[{method}] total={summary['total_s']:.1f}s mean={summary['mean_s']:.4f}s "
+              f"p50={summary['p50_s']:.4f}s p95={summary['p95_s']:.4f}s "
+              f"max={summary['max_s']:.4f}s empty={n_empty}/{n_written}", flush=True)
 
 
 if __name__ == '__main__':
