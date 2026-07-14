@@ -652,131 +652,98 @@ def k_shortest_paths_with_max_length(g,
     return paths
 
 
-def graph_powering_paths(g, src_nid, tgt_nid, weight='eweight', k=5, max_length=5,
-                          exclude_node=[]):
-    """Power-Link-style path retrieval (arXiv:2401.02290): replace Yen's
-    k-shortest-paths / (bidirectional) Dijkstra with iterative graph-powering
-    -- repeated sparse matrix-vector propagation of the graph's weighted
-    adjacency -- followed by a cheap greedy backward decode to recover
-    concrete node sequences.
+def power_link_p_on(g, src_nid, tgt_nid, eweights, max_length=5):
+    """Power-Link path-enforcing on-path probability P_on (arXiv:2401.02290
+    Eqs 7-9). Fully differentiable w.r.t. `eweights` (no discrete path
+    decoding, no `.item()` breaking autograd) -- this computes the training
+    signal for the Triplet Edge Scorer (TES), not a set of concrete paths.
 
-    `k_shortest_paths_with_max_length` does a sequential, per-pair heap-based
-    search (Yen's algorithm on top of bidirectional Dijkstra), which is called
-    repeatedly (once per mask-learning epoch via `path_loss`, plus once more
-    in `get_paths`) and dominates PaGE-Link's wall-clock. Graph-powering
-    instead does `max_length` batched sparse matmuls independent of the
-    number of (src, tgt) pairs or epochs, and is fully differentiable end to
-    end (kept as plain tensor ops; no autograd is invoked here since callers
-    currently treat mask learning and path extraction as separate stages).
-
-    Uses the same "penalize high-degree nodes" transition weight as
-    `get_neg_path_score_func` (cost = log(in_degree) - log(eweight)), just
-    expressed multiplicatively: transition_weight(u -> v) = eweight(u, v) /
-    in_degree(v). A path's score is the product of its transition weights,
-    normalized by path length (matching Power-Link's length normalization),
-    so it favors short, high-confidence paths through low-degree nodes --
-    the same preference the original Dijkstra cost encodes.
+    Only the source (`src_nid`) row of the score matrix M is powered (the
+    paper's "simplification trick", Eq 5/7): starting from a one-hot vector
+    at `src_nid`, repeated sparse matrix-vector products with M give the
+    l-hop on-path mass u^(l)[tgt_nid] = sum over all length-l walks
+    src -> ... -> tgt_nid of the product of their edge scores. A parallel
+    power of the *binary* adjacency A counts the number of length-l walks
+    for normalization (Eq 8: divide by path count, then take the l-th
+    root). P_on is the average of the l-th-root-normalized mass over
+    l = 1 .. max_length - 1 (Eq 9).
 
     Parameters
     ----------
-    g : dgl graph (homogeneous), with `g.edata[weight]` giving edge weights in (0, 1]
+    g : dgl graph (homogeneous)
 
     src_nid, tgt_nid : int
         source / target node ids in `g`
 
-    weight : string
-        key into `g.edata` for the edge weight (analogous to eweight elsewhere)
-
-    k : int
-        max number of paths to return
+    eweights : Tensor, requires_grad-able
+        TES edge scores (in (0, 1], e.g. sigmoid outputs) for every edge
+        in `g`, in `g.edges()` order.
 
     max_length : int
-        max path length (number of hops) to search over
-
-    exclude_node : iterable
-        nodes whose in-degree is not used to penalize (mirrors
-        `get_neg_path_score_func`'s `exclude_node`)
+        paths of length < max_length are enhanced (paper's L)
 
     Returns
     -------
-    paths : list of lists
-        each inner list is a path of node ids, src_nid first tgt_nid last,
-        longest/most-confident (by normalized score) paths first. Same
-        format as `k_shortest_paths_with_max_length`.
+    P_on : Tensor (scalar) or None
+        None if no walk of any length in [1, max_length) connects
+        src_nid to tgt_nid (caller should skip the path loss term).
     """
-    device = g.device
+    device = eweights.device
     N = g.num_nodes()
     src_nodes, dst_nodes = g.edges()
-    eweights = g.edata[weight]
 
-    in_degree = g.in_degrees().float().clamp(min=1)
-    if len(exclude_node) > 0:
-        in_degree[list(exclude_node)] = 1.0
-    trans_w = eweights / in_degree[dst_nodes]
-
-    # A_t[j, i] = trans_w(i -> j), so that (A_t @ v)[j] = sum_i trans_w(i,j) * v[i]
-    # i.e. propagates mass forward along edges into their destination.
     idx = torch.stack([dst_nodes, src_nodes])
-    A_t = torch.sparse_coo_tensor(idx, trans_w, (N, N)).coalesce()
+    M_t = torch.sparse_coo_tensor(idx, eweights, (N, N)).coalesce()
+    A_t = torch.sparse_coo_tensor(idx, torch.ones_like(eweights), (N, N)).coalesce()
 
-    v = torch.zeros(N, device=device)
-    v[src_nid] = 1.0
-    fwd = [v]
-    for _ in range(max_length):
-        v = torch.sparse.mm(A_t, v.unsqueeze(1)).squeeze(1)
-        fwd += [v]
+    u = torch.zeros(N, device=device)
+    u[src_nid] = 1.0
+    a = torch.zeros(N, device=device)
+    a[src_nid] = 1.0
 
-    length_scores = []
-    for L in range(1, max_length + 1):
-        mass = fwd[L][tgt_nid].item()
-        if mass > 0:
-            length_scores.append((mass / L, L))
-    length_scores.sort(key=lambda x: x[0], reverse=True)
+    terms = []
+    for l in range(1, max_length):
+        u = torch.sparse.mm(M_t, u.unsqueeze(1)).squeeze(1)
+        a = torch.sparse.mm(A_t, a.unsqueeze(1)).squeeze(1)
+        num_paths = a[tgt_nid]
+        if num_paths.item() > 0:
+            normalized = (u[tgt_nid] / num_paths.clamp(min=1e-12)).clamp(min=1e-12).pow(1.0 / l)
+            terms += [normalized]
 
-    if not length_scores:
-        return []
+    if not terms:
+        return None
+    return torch.stack(terms).mean()
 
-    incoming = {}
-    for s, d, w in zip(src_nodes.tolist(), dst_nodes.tolist(), trans_w.tolist()):
-        incoming.setdefault(d, []).append((s, w))
 
-    def backtrack(L):
-        # Greedy backward decode guided by the forward potentials. Simple-path
-        # constraint (no revisits) is enforced explicitly: without it, a sparse
-        # local subgraph (e.g. after k-hop/k-core pruning) can make the same
-        # edge dominate every step, producing a degenerate u->v->u->v... walk
-        # instead of a real path -- Yen's k-shortest-paths (the Dijkstra
-        # baseline) only ever enumerates simple paths, so this keeps parity.
-        cur = int(tgt_nid)
-        path = [cur]
-        visited = {cur}
-        for l in range(L, 0, -1):
-            cands = [(u, w) for u, w in incoming.get(cur, []) if u not in visited]
-            if not cands:
-                return None
-            if l == 1:
-                if not any(u == int(src_nid) for u, _ in cands):
-                    return None
-                cur = int(src_nid)
-            else:
-                cur = max(cands, key=lambda uw: fwd[l - 1][uw[0]].item() * uw[1])[0]
-            if cur in visited:
-                return None
-            path.append(cur)
-            visited.add(cur)
-        path.reverse()
-        return path if path[0] == int(src_nid) else None
+def get_inverse_score_func(g, weight, eps=1e-4):
+    """Power-Link Path Generation cost function (Eq 13): "take the inverse
+    values of the score matrix as the cost matrix and apply Dijkstra's
+    algorithm", since Dijkstra minimizes total cost while a higher TES
+    score means a more relevant/explanatory edge.
 
-    paths, seen = [], set()
-    for _, L in length_scores:
-        p = backtrack(L)
-        if p is not None and tuple(p) not in seen:
-            seen.add(tuple(p))
-            paths.append(p)
-        if len(paths) >= k:
-            break
+    Parameters
+    ----------
+    g : dgl graph
 
-    return paths
+    weight : string
+        key into `g.edata` giving the (trained) TES score in (0, 1]
+
+    eps : float
+        clamp the score away from 0 before inverting, to keep Dijkstra's
+        costs finite
+
+    Returns
+    ----------
+    inverse_score_func: callable function
+       Takes in two node ids and returns the edge cost 1 / score.
+    """
+    inv_weights = (1.0 / g.edata[weight].clamp(min=eps)).tolist()
+    u, v = g.edges()
+    inv_score_map = {edge: w for edge, w in zip(zip(u.tolist(), v.tolist()), inv_weights)}
+
+    def inverse_score_func(u, v):
+        return inv_score_map[(u, v)]
+    return inverse_score_func
 
 '''
 Evaluation utils

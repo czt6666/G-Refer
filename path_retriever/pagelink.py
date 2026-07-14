@@ -73,7 +73,9 @@ parser.add_argument('--prune_max_degree', type=int, default=200,
                     help='prune the graph such that all nodes have degree smaller than max_degree. No prune if -1') 
 parser.add_argument('--path_method', type=str, default='dijkstra', choices=['dijkstra', 'power'],
                     help="'dijkstra' = original PaGE-Link Yen's k-shortest-paths; "
-                         "'power' = Power-Link graph-powering (arXiv:2401.02290)")
+                         "'power' = Power-Link TES + graph-powering path loss (arXiv:2401.02290)")
+parser.add_argument('--gamma', type=float, default=1e-3,
+                    help="Power-Link's ||M||^2 regularizer weight (Eq 12), only used when path_method=power")
 parser.add_argument('--save_explanation', default=False, action='store_true',
                     help='Whether to save the explanation')
 parser.add_argument('--saved_explanation_dir', type=str, default='saved_explanations',
@@ -118,7 +120,9 @@ pagelink = PaGELink(model,
                     beta=args.beta,
                     num_epochs=args.num_epochs,
                     log=True,
-                    path_method=args.path_method).to(device)
+                    path_method=args.path_method,
+                    pred_etype=args.pred_etype,
+                    gamma=args.gamma).to(device)
 
 
 test_src_nids, test_tgt_nids = test_pos_g.edges()

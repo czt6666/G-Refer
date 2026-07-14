@@ -81,6 +81,8 @@ def main():
     p.add_argument('--k_core', type=int, default=2)
     p.add_argument('--prune_max_degree', type=int, default=200)
     p.add_argument('--output_dir', default='convert_files/phase1_quality')
+    p.add_argument('--shard_id', type=int, default=0, help='process sample[shard_id::num_shards] only, for parallel sharding')
+    p.add_argument('--num_shards', type=int, default=1)
     args = p.parse_args()
 
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -108,9 +110,12 @@ def main():
     import random
     random.seed(args.seed)
     sample = random.sample(raw_pairs, min(args.n_samples, len(raw_pairs)))
+    if args.num_shards > 1:
+        sample = sample[args.shard_id::args.num_shards]
 
     os.makedirs(args.output_dir, exist_ok=True)
-    out_files = {m: open(os.path.join(args.output_dir, f'test_{m}.json'), 'w')
+    suffix = f'.shard{args.shard_id}' if args.num_shards > 1 else ''
+    out_files = {m: open(os.path.join(args.output_dir, f'test_{m}{suffix}.json'), 'w')
                 for m in ('dijkstra', 'power')}
     timings = {m: [] for m in ('dijkstra', 'power')}
     n_empty = {m: 0 for m in ('dijkstra', 'power')}

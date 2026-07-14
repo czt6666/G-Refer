@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from collections import defaultdict
 from utils import get_ntype_hetero_nids_to_homo_nids, get_homo_nids_to_ntype_hetero_nids, get_ntype_pairs_to_cannonical_etypes
 from utils import hetero_src_tgt_khop_in_subgraph, get_neg_path_score_func, k_shortest_paths_with_max_length
-from utils import graph_powering_paths
+from utils import power_link_p_on, get_inverse_score_func
 
 def get_edge_mask_dict(ghetero):
     '''
@@ -146,6 +146,49 @@ def comp_g_paths_to_paths(comp_g, comp_g_paths):
     return paths
 
 
+class TripletEdgeScorer(nn.Module):
+    """Triplet Edge Scorer (TES), Power-Link Eq 1-3 (arXiv:2401.02290).
+
+    Scores every edge (h_i, r_j, t_k) in the computation graph by an MLP
+    over the concatenation of its own (frozen, from the trained KGC/GNN
+    encoder) triplet embedding with the target triplet (h_hat, r_hat,
+    t_hat) being explained -- the paper's "concatenation" combination
+    strategy (Eq 2), used in all of its main experiments. TES is retrained
+    from scratch for each explained instance via backprop, same as the
+    edge mask it replaces (Algorithm 1).
+
+    This graph has no native per-relation embedding (its GNN encoder only
+    has per-canonical-etype message-passing weights, not a relation
+    embedding table like TransE/DistMult/ConvE in the paper's KGC setting),
+    so `rel_emb` is a small learnable table trained jointly with the MLP.
+    """
+    def __init__(self, emb_dim, num_etypes, hidden_dim=64):
+        super().__init__()
+        self.rel_emb = nn.Embedding(num_etypes, emb_dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(emb_dim * 6, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1),
+        )
+
+    def forward(self, h_i, etype_ids, t_k, h_hat, r_hat_id, t_hat):
+        """
+        h_i, t_k : (E, emb_dim) local edge triplet endpoint embeddings
+        etype_ids : (E,) local edge triplet relation ids
+        h_hat, t_hat : (1, emb_dim) target triplet endpoint embeddings
+        r_hat_id : scalar tensor, target triplet relation id
+
+        Returns
+        -------
+        (E,) raw score logits (apply .sigmoid() to get the TES probability)
+        """
+        e = h_i.shape[0]
+        r_j = self.rel_emb(etype_ids)
+        r_hat = self.rel_emb(r_hat_id).expand(e, -1)
+        x = torch.cat([h_i, r_j, t_k, h_hat.expand(e, -1), r_hat, t_hat.expand(e, -1)], dim=-1)
+        return self.mlp(x).squeeze(-1)
+
+
 class PaGELink(nn.Module):
     """Path-based GNN Explanation for Heterogeneous Link Prediction (PaGELink)
     
@@ -187,7 +230,9 @@ class PaGELink(nn.Module):
                  alpha=1.0,
                  beta=1.0,
                  log=False,
-                 path_method='dijkstra'):
+                 path_method='dijkstra',
+                 pred_etype='likes',
+                 gamma=1e-3):
         super(PaGELink, self).__init__()
         self.model = model
         self.src_ntype = model.src_ntype
@@ -201,9 +246,14 @@ class PaGELink(nn.Module):
 
         assert path_method in ('dijkstra', 'power'), \
             "path_method must be 'dijkstra' (original PaGE-Link) or " \
-            "'power' (Power-Link graph-powering, arXiv:2401.02290)"
+            "'power' (Power-Link, arXiv:2401.02290: TES + graph-powering path loss)"
         self.path_method = path_method
-        # set per-call in `explain`, used by `path_loss`'s power-method branch
+        # the relation type being predicted/explained -- Power-Link's target
+        # triplet relation r_hat (Sec 5.1); also used by `path_loss`'s
+        # power-method branch, set per-call in `explain`
+        self.pred_etype = pred_etype
+        # weight of the ||M||^2 regularizer on the TES score matrix (Eq 12)
+        self.gamma = gamma
         self._path_loss_max_length = 5
 
         self.all_loss = defaultdict(list)
@@ -268,7 +318,9 @@ class PaGELink(nn.Module):
         
         
     def path_loss(self, src_nid, tgt_nid, g, eweights, num_paths=5):
-        """Compute the path loss.
+        """Compute the (original PaGE-Link) path loss for the 'dijkstra'
+        baseline: find k-shortest paths under the current mask, then push
+        their edge weights up and all other edges' weights down.
 
         Parameters
         ----------
@@ -282,7 +334,7 @@ class PaGELink(nn.Module):
 
         eweights : Tensor
             Edge weights with shape equals the number of edges.
-            
+
         num_paths : int
             Number of paths to compute path loss on
 
@@ -291,21 +343,12 @@ class PaGELink(nn.Module):
         loss : Tensor
             The path loss
         """
-        if self.path_method == 'power':
-            paths = graph_powering_paths(g,
-                                         src_nid,
-                                         tgt_nid,
-                                         weight='eweight',
-                                         k=num_paths,
-                                         max_length=self._path_loss_max_length,
-                                         exclude_node=[src_nid, tgt_nid])
-        else:
-            neg_path_score_func = get_neg_path_score_func(g, 'eweight', [src_nid, tgt_nid])
-            paths = k_shortest_paths_with_max_length(g,
-                                                     src_nid,
-                                                     tgt_nid,
-                                                     weight=neg_path_score_func,
-                                                     k=num_paths)
+        neg_path_score_func = get_neg_path_score_func(g, 'eweight', [src_nid, tgt_nid])
+        paths = k_shortest_paths_with_max_length(g,
+                                                 src_nid,
+                                                 tgt_nid,
+                                                 weight=neg_path_score_func,
+                                                 k=num_paths)
 
         eids_on_path = get_eids_on_paths(paths, g)
 
@@ -352,8 +395,8 @@ class PaGELink(nn.Module):
 
         self.model.eval()
         device = ghetero.device
-        
-        ntype_hetero_nids_to_homo_nids = get_ntype_hetero_nids_to_homo_nids(ghetero)    
+
+        ntype_hetero_nids_to_homo_nids = get_ntype_hetero_nids_to_homo_nids(ghetero)
         homo_src_nid = ntype_hetero_nids_to_homo_nids[(self.src_ntype, int(src_nid))]
         homo_tgt_nid = ntype_hetero_nids_to_homo_nids[(self.tgt_ntype, int(tgt_nid))]
 
@@ -363,28 +406,56 @@ class PaGELink(nn.Module):
             pred = (score > 0).int().item()
 
         if prune_graph:
-            # The pruned graph for mask learning  
-            ml_ghetero, etypes_to_pruned_ghetero_eid_masks = self._prune_graph(ghetero, 
+            # The pruned graph for mask learning
+            ml_ghetero, etypes_to_pruned_ghetero_eid_masks = self._prune_graph(ghetero,
                                                                                prune_max_degree,
                                                                                k_core,
                                                                                [homo_src_nid, homo_tgt_nid])
         else:
-            # The original graph for mask learning  
+            # The original graph for mask learning
             ml_ghetero = ghetero
-            
+
+        if self.path_method == 'power':
+            ml_edge_mask_dict = self._train_tes_power(src_nid, tgt_nid, ml_ghetero, feat_nids,
+                                                       pred, homo_src_nid, homo_tgt_nid, with_path_loss)
+        else:
+            ml_edge_mask_dict = self._train_mask_dijkstra(src_nid, tgt_nid, ml_ghetero, feat_nids,
+                                                           pred, homo_src_nid, homo_tgt_nid, with_path_loss)
+
+        edge_mask_dict_placeholder = self._init_masks(ghetero)
+        edge_mask_dict = {}
+
+        if prune_graph:
+            # remove pruned edges
+            for etype in ghetero.canonical_etypes:
+                edge_mask = edge_mask_dict_placeholder[etype].data + float('-inf')
+                pruned_ghetero_eid_mask = etypes_to_pruned_ghetero_eid_masks[etype]
+                edge_mask[pruned_ghetero_eid_mask] = ml_edge_mask_dict[etype]
+                edge_mask_dict[etype] = edge_mask
+
+        else:
+            edge_mask_dict = ml_edge_mask_dict
+
+        edge_mask_dict = {k : v.detach() for k, v in edge_mask_dict.items()}
+        return edge_mask_dict
+
+    def _train_mask_dijkstra(self, src_nid, tgt_nid, ml_ghetero, feat_nids,
+                              pred, homo_src_nid, homo_tgt_nid, with_path_loss):
+        """Original PaGE-Link mask learning: a free scalar per edge, path
+        loss found via Dijkstra/Yen's k-shortest-paths every epoch."""
         ml_edge_mask_dict = self._init_masks(ml_ghetero)
         optimizer = torch.optim.Adam(ml_edge_mask_dict.values(), lr=self.lr)
-        
+
         if self.log:
             pbar = tqdm(total=self.num_epochs)
 
         eweight_norm = 0
         EPS = 1e-3
-        for e in range(self.num_epochs):    
-            
+        for e in range(self.num_epochs):
+
             # Apply sigmoid to edge_mask to get eweight
             ml_eweight_dict = {etype: ml_edge_mask_dict[etype].sigmoid() for etype in ml_edge_mask_dict}
-        
+
             score = self.model(src_nid, tgt_nid, ml_ghetero, feat_nids, ml_eweight_dict)
             pred_loss = (-1) ** pred * score.sigmoid().log()
             self.all_loss['pred_loss'] += [pred_loss.item()]
@@ -392,25 +463,25 @@ class PaGELink(nn.Module):
             ml_ghetero.edata['eweight'] = ml_eweight_dict
             ml_ghomo = dgl.to_homogeneous(ml_ghetero, edata=['eweight'])
             ml_ghomo_eweights = ml_ghomo.edata['eweight']
-            
+
             # Check for early stop
             curr_eweight_norm = ml_ghomo_eweights.norm()
             if abs(eweight_norm - curr_eweight_norm) < EPS:
                 break
             eweight_norm = curr_eweight_norm
-            
+
             # Update with path loss
             if with_path_loss:
                 path_loss = self.path_loss(homo_src_nid, homo_tgt_nid, ml_ghomo, ml_ghomo_eweights)
-            else: 
+            else:
                 path_loss = 0
-            
+
             loss = pred_loss + path_loss
-            
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
+
             self.all_loss['total_loss'] += [loss.item()]
 
             if self.log:
@@ -419,22 +490,123 @@ class PaGELink(nn.Module):
         if self.log:
             pbar.close()
 
-        edge_mask_dict_placeholder = self._init_masks(ghetero)
-        edge_mask_dict = {}
-        
-        if prune_graph:
-            # remove pruned edges
-            for etype in ghetero.canonical_etypes:
-                edge_mask = edge_mask_dict_placeholder[etype].data + float('-inf')    
-                pruned_ghetero_eid_mask = etypes_to_pruned_ghetero_eid_masks[etype]
-                edge_mask[pruned_ghetero_eid_mask] = ml_edge_mask_dict[etype]
-                edge_mask_dict[etype] = edge_mask
-                
-        else:
-            edge_mask_dict = ml_edge_mask_dict
-    
-        edge_mask_dict = {k : v.detach() for k, v in edge_mask_dict.items()}
-        return edge_mask_dict    
+        return ml_edge_mask_dict
+
+    def _frozen_homo_node_emb(self, ghetero, feat_nids):
+        """Frozen entity embeddings from the trained (post-hoc, not
+        modified) KGC/GNN encoder Phi, reindexed onto the homogeneous
+        node numbering -- the entity half of the TES's Combine() input
+        (Eq 2/3)."""
+        with torch.no_grad():
+            emb_dict = self.model.encode(ghetero, feat_nids)
+        ghomo = dgl.to_homogeneous(ghetero)
+        ntype_ids = ghomo.ndata[dgl.NTYPE]
+        hetero_nids = ghomo.ndata[dgl.NID]
+        emb_dim = next(iter(emb_dict.values())).shape[1]
+        homo_emb = torch.zeros(ghomo.num_nodes(), emb_dim, device=ghetero.device)
+        for i, ntype in enumerate(ghetero.ntypes):
+            mask = ntype_ids == i
+            if mask.any():
+                homo_emb[mask] = emb_dict[ntype][hetero_nids[mask]]
+        return ghomo, homo_emb
+
+    def _train_tes_power(self, src_nid, tgt_nid, ml_ghetero, feat_nids,
+                          pred, homo_src_nid, homo_tgt_nid, with_path_loss):
+        """Power-Link Path-Enforcing Learning (Sec 5.2, Algorithm 1): train
+        a Triplet Edge Scorer (TES) per instance by backprop through the
+        fully-differentiable graph-powering path loss (Eq 10) plus the
+        prediction/fidelity loss (Eq 11) and a ||M||^2 regularizer (Eq 12).
+        Entity embeddings come from the frozen encoder and are computed
+        once; only the TES's own parameters (MLP + relation embedding
+        table) are optimized here."""
+        device = ml_ghetero.device
+        ghomo_struct, homo_node_emb = self._frozen_homo_node_emb(ml_ghetero, feat_nids)
+        homo_src_e, homo_dst_e = ghomo_struct.edges()
+        homo_etype_ids = ghomo_struct.edata[dgl.ETYPE]
+        homo_eid_within_etype = ghomo_struct.edata[dgl.EID]
+
+        canonical_etypes = ml_ghetero.canonical_etypes
+        num_etypes = len(canonical_etypes)
+        emb_dim = homo_node_emb.shape[1]
+        tes = TripletEdgeScorer(emb_dim, num_etypes, hidden_dim=max(32, emb_dim)).to(device)
+        optimizer = torch.optim.Adam(tes.parameters(), lr=self.lr)
+
+        pred_etype_ids = [i for i, et in enumerate(canonical_etypes) if et[1] == self.pred_etype]
+        pred_etype_id = torch.tensor(pred_etype_ids[0] if pred_etype_ids else 0, device=device)
+
+        h_i = homo_node_emb[homo_src_e]
+        t_k = homo_node_emb[homo_dst_e]
+        h_hat = homo_node_emb[homo_src_nid].unsqueeze(0)
+        t_hat = homo_node_emb[homo_tgt_nid].unsqueeze(0)
+
+        def scores_to_hetero_eweight_dict(scores):
+            eweight_dict = {}
+            for i, etype in enumerate(canonical_etypes):
+                mask = homo_etype_ids == i
+                n = ml_ghetero.num_edges(etype)
+                w = torch.zeros(n, device=device, dtype=scores.dtype)
+                if mask.any():
+                    w = w.scatter(0, homo_eid_within_etype[mask], scores[mask])
+                eweight_dict[etype] = w
+            return eweight_dict
+
+        if self.log:
+            pbar = tqdm(total=self.num_epochs)
+
+        eweight_norm = 0
+        EPS = 1e-3
+        last_logits = None
+        for e in range(self.num_epochs):
+            logits = tes(h_i, homo_etype_ids, t_k, h_hat, pred_etype_id, t_hat)
+            eweights_homo = logits.sigmoid()
+            last_logits = logits
+
+            ml_eweight_dict = scores_to_hetero_eweight_dict(eweights_homo)
+            score = self.model(src_nid, tgt_nid, ml_ghetero, feat_nids, ml_eweight_dict)
+            pred_loss = (-1) ** pred * score.sigmoid().log()
+            self.all_loss['pred_loss'] += [pred_loss.item()]
+
+            curr_eweight_norm = eweights_homo.norm()
+            if abs(eweight_norm - curr_eweight_norm) < EPS:
+                break
+            eweight_norm = curr_eweight_norm
+
+            if with_path_loss:
+                p_on = power_link_p_on(ghomo_struct, homo_src_nid, homo_tgt_nid,
+                                        eweights_homo, max_length=self._path_loss_max_length)
+                path_loss = -torch.log(p_on.clamp(min=1e-12)) if p_on is not None else 0
+            else:
+                path_loss = 0
+
+            reg_loss = self.gamma * eweights_homo.pow(2).sum()
+
+            loss = pred_loss + path_loss + reg_loss
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            self.all_loss['total_loss'] += [loss.item()]
+
+            if self.log:
+                pbar.update(1)
+
+        if self.log:
+            pbar.close()
+
+        with torch.no_grad():
+            final_logits = last_logits if last_logits is not None else \
+                tes(h_i, homo_etype_ids, t_k, h_hat, pred_etype_id, t_hat)
+            ml_edge_mask_dict = {}
+            for i, etype in enumerate(canonical_etypes):
+                mask = homo_etype_ids == i
+                n = ml_ghetero.num_edges(etype)
+                w = torch.full((n,), float('-inf'), device=device)
+                if mask.any():
+                    w = w.scatter(0, homo_eid_within_etype[mask], final_logits[mask])
+                ml_edge_mask_dict[etype] = w
+
+        return ml_edge_mask_dict
 
     def get_paths(self,
                   src_nid, 
@@ -469,13 +641,15 @@ class PaGELink(nn.Module):
         homo_tgt_nid = ntype_hetero_nids_to_homo_nids[(self.tgt_ntype, int(tgt_nid))]
 
         if self.path_method == 'power':
-            homo_paths = graph_powering_paths(ghomo,
-                                              homo_src_nid,
-                                              homo_tgt_nid,
-                                              weight='eweight',
-                                              k=num_paths,
-                                              max_length=max_path_length,
-                                              exclude_node=[homo_src_nid, homo_tgt_nid])
+            # Power-Link Path Generation (Eq 13): invert the trained TES
+            # score matrix M into a cost matrix and run Dijkstra once.
+            inverse_score_func = get_inverse_score_func(ghomo, 'eweight')
+            homo_paths = k_shortest_paths_with_max_length(ghomo,
+                                                           homo_src_nid,
+                                                           homo_tgt_nid,
+                                                           weight=inverse_score_func,
+                                                           k=num_paths,
+                                                           max_length=max_path_length)
         else:
             neg_path_score_func = get_neg_path_score_func(ghomo, 'eweight', [src_nid.item(), tgt_nid.item()])
             homo_paths = k_shortest_paths_with_max_length(ghomo,
